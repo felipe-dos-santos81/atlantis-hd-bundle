@@ -127,7 +127,8 @@ class CaptionTests(DriverFixture):
         self.assertIn("done: captioned=3 skipped=1 failed=0", out)
         # room 2's own request: the room at 2x, then its windows at 4x.
         images = vlm.caption.call_args_list[1].args[0]
-        self.assertEqual([im.size for im in images], [(1136, 288), (1280, 576), (1280, 576)])
+        self.assertEqual([im.size for im in images], [(1136, 288), (1280, 576), (1280, 576)],
+                         msg="room 2: the room at 2x, then its windows at 4x")
 
     def test_keeps_existing_captions_unless_forced_and_keeps_the_kind(self):
         with self.subTest("keeps existing captions unless forced"):
@@ -286,7 +287,10 @@ class BatchTests(DriverFixture):
         return code, out, err, mocks
 
     def test_batch_dry_run_renders_reruns_and_reacts_to_changes(self):
+        # Each facet resets to a fresh fixture state first, so one facet's failure
+        # cannot cascade into a misleading failure of a later, unrelated facet.
         with self.subTest("dry run plans without comfyui"):
+            self.setUp()
             code, out, _, mocks = self.batch("--dry-run")
             self.assertEqual(code, 0)
             self.assertIn("render  room_002 scene  -> 2272x576  windows 0-320 248-568", out)
@@ -296,23 +300,30 @@ class BatchTests(DriverFixture):
             mocks.render.assert_not_called()
             self.assertFalse(self.dst.exists())
         with self.subTest("renders, copies and verifies"):
+            self.setUp()
             code, out, err, mocks = self.batch()
             self.assertEqual(code, 0, err)
             self.assertIn("done: promoted=3 rejected=0 failed=0 copied=1", out)
             mocks.freed.assert_called_once()
             self.assertEqual(self.run_cli("verify")[0], 0)
         with self.subTest("a second run has nothing to do"):
+            self.setUp()
+            self.batch()
             code, out, _, mocks = self.batch()
             self.assertEqual(code, 0)
             mocks.render.assert_not_called()
             mocks.is_up.assert_not_called()
             self.assertIn("render 0, copy 0 (kind skip), done 4", out)
         with self.subTest("a deleted output is rendered again"):
+            self.setUp()
+            self.batch("--room", "1")
             (self.dst / "room_001.png").unlink()
             _, out, _, _ = self.batch("--room", "1")
             self.assertIn("promoted attempt 2", out)
         with self.subTest("skip rooms are written once"):
+            self.setUp()
             path = self.dst / "room_004.png"
+            self.batch("--room", "4")
             with Image.open(path) as im:
                 self.assertEqual((im.size, im.getpixel((0, 0))), ((64, 800), (0, 0, 0)))
             Image.new("RGB", (64, 800), "red").save(path)
