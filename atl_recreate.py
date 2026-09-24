@@ -36,8 +36,8 @@ import comfy_client
 import geometry_check
 import room_geometry
 import source_tree
-from prompts import (PAINTED_NEGATIVE, SEAM_NOTE, caption_room, render_prompt, vlm_is_serving,
-                     window_note)
+from prompts import (PAINTED_NEGATIVE, SEAM_NOTE, caption_room, render_prompt, review_room,
+                     vlm_is_serving, window_note)
 from rooms_file import (Review, RoomEntry, RoomsFileError, check_coverage, load_reviews,
                         load_rooms, save_reviews, save_rooms)
 from source_tree import SourceError
@@ -488,6 +488,71 @@ def cmd_batch(args):
             print(f"warning: failed to free ComfyUI's models: {error}", file=sys.stderr)
 
 
+# ---- review -----------------------------------------------------------------
+
+def review_images(src, room, output):
+    """([(guide window, render window), ...], whole render) for the VLM."""
+    indexed = source_tree.open_indexed(src, room)
+    guide = room_geometry.build_guide(indexed)
+    plan = room_geometry.plan_room(indexed)
+    with Image.open(output) as im:
+        render = im.convert("RGB")
+    pairs = []
+    for win in plan.windows:
+        box = (win.x0 * SCALE, 0, win.x1 * SCALE, render.height)
+        pairs.append((guide.full.crop(box), render.crop(box)))
+    return pairs, render
+
+
+def cmd_review(args):
+    rooms = selection(args)
+    entries = load_entries(args)
+    if not vlm_is_serving(VLM_BASE_URL, VLM_MODEL, comfy_client.http_json, VLM_API_KEY):
+        return fail(f"vLLM is not serving {VLM_MODEL} at {VLM_BASE_URL} - start it first")
+    try:
+        comfy_client.free_models(COMFY_URL)     # give the VLM room; ComfyUI may be down
+    except Exception:
+        pass
+    reviews = load_reviews(args.reviews, optional=True)
+    accepted = rejected = skipped = failed = 0
+    for i, room in enumerate(rooms, 1):
+        entry = entries[room.key]
+        audit = audit_dir(args.dst, room)
+        attempt = latest_attempt(audit)
+        record = read_record(audit, attempt) if attempt else None
+        dst = args.dst / room.out_name
+        review = reviews.get(room.key)
+        # Only a promoted latest attempt is judged: a geometry rejection already
+        # has its verdict, and a failed attempt has nothing to show.
+        if (entry.kind == "skip" or record is None or not record.get("promoted")
+                or not dst.is_file()
+                or (review is not None and review.attempt >= attempt and not args.force)):
+            skipped += 1
+            continue
+        print(f"[{i}/{len(rooms)}] review {room.key} (attempt {attempt})", flush=True)
+        try:
+            pairs, overview = review_images(args.src, room, dst)
+            verdict = review_room(pairs, overview, entry.kind, entry.caption,
+                                  comfy_client.http_json, VLM_BASE_URL, VLM_MODEL, VLM_API_KEY)
+        except Exception as error:
+            failed += 1
+            write_atomic(audit / f"attempt-{attempt}.review-error.txt", str(error))
+            print(f"  ERROR reviewing {room.key}: {error}", file=sys.stderr, flush=True)
+            continue
+        write_atomic(audit / f"attempt-{attempt}.review.json", json.dumps(verdict, indent=2))
+        reviews[room.key] = Review(attempt, verdict["accepted"], tuple(verdict["issues"]), "review")
+        save_reviews(args.reviews, reviews)
+        if verdict["accepted"]:
+            accepted += 1
+            print("  accepted")
+        else:
+            rejected += 1
+            print("  rejected: " + "; ".join(verdict["issues"]))
+    print(f"done: accepted={accepted} rejected={rejected} skipped={skipped} failed={failed} "
+          f"-> {args.reviews}")
+    return 1 if failed else 0
+
+
 # ---- command line -----------------------------------------------------------
 
 def default_workflow(environ=os.environ):
@@ -562,6 +627,13 @@ def build_parser():
                        help="render workflow: " + ", ".join(sorted(comfy_client.WORKFLOWS))
                             + " (default: %(default)s, or ATL_WORKFLOW)")
     batch.set_defaults(func=cmd_batch)
+
+    review = sub.add_parser("review", help="compare promoted rooms with their sources through "
+                                           "the local vLLM")
+    common(review)
+    review.add_argument("--force", action="store_true",
+                        help="review rooms whose latest attempt was already reviewed")
+    review.set_defaults(func=cmd_review)
 
     verify = sub.add_parser("verify", help="audit the output tree against the manifest, the 4x "
                                            "rule and the attempt records")

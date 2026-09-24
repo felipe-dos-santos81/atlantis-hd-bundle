@@ -415,5 +415,79 @@ class BatchTests(DriverFixture):
                 self.assertIn(message, err)
 
 
+class ReviewTests(DriverFixture):
+    def setUp(self):
+        super().setUp()
+        with testkit.comfy_stub(comfy_dir=self.comfy_dir, render=testkit.fake_render()):
+            self.run_cli("batch")
+
+    def review(self, *extra, verdict=None, **stub):
+        verdict = verdict or (lambda pairs, overview, kind, caption, *a:
+                              {"accepted": True, "issues": []})
+        with testkit.vlm_stub(review=verdict, free=None, **stub) as vlm:
+            code, out, err = self.run_cli("review", *extra)
+        return code, out, err, vlm
+
+    def test_reviews_every_promoted_room(self):
+        code, _, err, vlm = self.review()
+        self.assertEqual(code, 0, err)
+        reviews = load_reviews(self.reviews)
+        self.assertEqual(sorted(reviews), ["room_001", "room_002", "room_003"])
+        self.assertTrue(all(r.accepted and r.attempt == 1 and r.source == "review"
+                            for r in reviews.values()))
+        self.assertEqual([len(c.args[0]) for c in vlm.review.call_args_list], [1, 2, 4])
+        self.assertEqual(vlm.review.call_args_list[2].args[1].size, (4608, 576))
+        vlm.freed.assert_called_once()
+        self.assertTrue((self.dst / ".quality/room_001/attempt-1.review.json").is_file())
+
+    def test_skips_reviewed_rooms_unless_forced(self):
+        self.review()
+        _, out, _, vlm = self.review()
+        vlm.review.assert_not_called()
+        self.assertIn("skipped=4", out)
+        _, _, _, vlm = self.review("--force", "--room", "1")
+        self.assertEqual(vlm.review.call_count, 1)
+
+    def test_a_rejection_sends_the_room_back_to_batch(self):
+        def verdict(pairs, *a):
+            if len(pairs) == 2:
+                return {"accepted": False, "issues": ["window 2: the awning moved; move it back"]}
+            return {"accepted": True, "issues": []}
+        self.review(verdict=verdict)
+        with testkit.comfy_stub(comfy_dir=self.comfy_dir, render=testkit.fake_render()) as mocks:
+            self.run_cli("batch")
+        self.assertEqual({c.kwargs["name"] for c in mocks.render.call_args_list},
+                         {"room_002_window-1", "room_002_window-2"})
+
+    def test_a_geometry_rejected_attempt_is_not_reviewed(self):
+        # Review Focus: review must not judge an output older than the latest attempt.
+        with testkit.comfy_stub(comfy_dir=self.comfy_dir,
+                                render=testkit.fake_render(testkit.shift_right)):
+            self.run_cli("batch", "--room", "1", "--force")
+        _, _, _, vlm = self.review("--room", "1")
+        vlm.review.assert_not_called()
+        self.assertEqual(load_reviews(self.reviews)["room_001"].source, "geometry")
+
+    def test_refuses_without_vllm(self):
+        code, _, err, vlm = self.review(serving=False)
+        self.assertEqual(code, 2)
+        self.assertIn("vLLM is not serving", err)
+        vlm.review.assert_not_called()
+
+    def test_a_failed_review_is_recorded(self):
+        def boom(*a):
+            raise ValueError("VLM review verdict contradicts its issues")
+        code, _, _, _ = self.review("--room", "1", verdict=boom)
+        self.assertEqual(code, 1)
+        self.assertIn("contradicts", (self.dst / ".quality/room_001/attempt-1.review-error.txt")
+                      .read_text())
+
+    def test_a_down_comfyui_does_not_stop_the_review(self):
+        with testkit.vlm_stub(review=lambda *a: {"accepted": True, "issues": []},
+                              free=RuntimeError("connection refused")):
+            code, _, _ = self.run_cli("review", "--room", "1")
+        self.assertEqual(code, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
