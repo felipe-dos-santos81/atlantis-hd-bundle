@@ -15,8 +15,9 @@ def test_save_indexed_png_roundtrip(tmp_path):
     img = Image.open(out)
     assert img.mode == "P"
     assert img.size == (2, 2)
-    assert list(img.getdata()) == [0, 1, 2, 3]
-    assert img.getpalette()[:3] == [0, 0, 0]
+    assert list(img.tobytes()) == [0, 1, 2, 3]
+    flat = [c for rgb in colors for c in rgb]
+    assert img.getpalette() == flat
 
 
 def test_save_background_is_indexed(archive_path, tmp_path):
