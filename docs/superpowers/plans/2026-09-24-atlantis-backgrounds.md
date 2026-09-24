@@ -43,6 +43,8 @@ Deferred to separate plans, each with one format question to spike first:
   redistribute.**
 - Tool license stays permissive (no ScummVM GPL code is ported in this plan).
 - Room numbers are authoritative keys; names are optional and `null` in M1.
+- No comments in code. Some code blocks in this plan carry comments purely to
+  explain values to the reader; **do not carry them into the files.**
 - Verified constants: 96 rooms, numbers `1–33, 35–37, 39–98`. Room 1: w=320,
   h=200, `TRNS`=5, `CLUT[0]=(0,0,0)`, `CLUT[1]=(0,0,171)`, 40 strips, codec ids
   `{0x1C: 28, 0x44: 12}`. `LOFF` offset points at the `ROOM` block.
