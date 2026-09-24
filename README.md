@@ -82,56 +82,47 @@ room_047:
 
 ## Wide rooms and room 58
 
-A room wider than 320 columns renders as overlapping windows, each at most 320
-native columns wide (1280 px at 4x), overlapping by at least 64. Windows
-render left to right with one seed. Each later window holds the outer half of
-its overlap with the already-painted stitch and ramps across the inner half,
-so the brushwork continues instead of meeting at a seam.
+A room wider than 320 native columns (1280 px at 4x) renders as overlapping
+windows, left to right with one seed, each overlapping the last by at least
+64 columns so the brushwork blends instead of seaming.
 
-Room 58 wraps around: its columns 840–1063 repeat columns 0–223, and its last
-88 columns and its top 28 and bottom 26 rows are flat black. The kit detects
-this from the pixels. It renders the 840-column panorama, then one more seam
-window across the join. It then copies the repeated span over and fills the
-flat margins with the source colour, so the output repeats exactly where the
-game's art does.
+Room 58 wraps around (detected from its pixels): columns 840–1063 repeat
+0–223, and its last 88 columns plus its top 28 and bottom 26 rows are flat
+black. The kit renders the panorama plus one seam window across the join,
+then copies the repeat and fills the flat margins from the source, so the
+output repeats exactly where the game's art does.
 
 ## Checks
 
-Before a render is promoted, `make batch` colour-matches it toward its
-guide in float CIE Lab (a render whose colours already agree comes back
-within one level) and checks it:
+Before a render is promoted, `make batch` colour-matches it toward its guide
+in float CIE Lab (a render whose colours already agree comes back within one
+level), then checks it:
 
 - **Size:** exactly 4x native, RGB.
-- **Geometry:** the render, box-downscaled to native size, must not be shifted
-  by 0.5 px or more against the de-dithered source (over the room and within
-  each window), and must keep at least 80% of the source's strong edges
-  within 1 px, over the room and within each window. A source edge is strong
-  at a Sobel magnitude of 80 (`EDGE_THRESHOLD`); a render edge keeps it from
-  60 (`RENDER_EDGE_THRESHOLD`), since the 4x round trip weakens marginal
-  edges. A window with fewer than 100 strong source edge pixels
-  (`MIN_WINDOW_EDGES`) is too sparse to judge and reads 1.0. A failure is
-  written to `reviews.yaml` as `source: geometry`, and the next batch retries
-  the room. A test pins the gate on the real corpus: each of the 91 scene and
-  insert rooms' own guide, colour-matched and fixed up, passes.
-- **Seams:** a window boundary whose colour step is 3 times the local texture
-  (measured relative to the source's own step there) is printed as a warning.
+- **Geometry:** the render, box-downscaled to native size, must not be
+  shifted by half a native pixel or more — over the room and within each
+  window — and must keep most of the source's strong edges, per window
+  (thresholds: AGENTS.md §3). A failure is written to `reviews.yaml` as
+  `source: geometry`, and the next batch retries the room.
+- **Seams:** a window boundary whose colour step is far more than the local
+  texture's own step there is printed as a warning.
 
 A rejected room's next attempts carry the rejection's issues as corrections
-until one of them is promoted, even when an attempt in between failed. After
-a geometry rejection the correction is one fixed sentence asking the model to
-keep the reference layout; the gate's own issue strings stay in
-`reviews.yaml` and `attempt-N.json`.
+until one is promoted, even across a failed attempt in between; a geometry
+rejection's correction is one fixed sentence asking the model to keep the
+reference layout.
 
-A room is **STUCK** when its latest judged attempt (one with an
-`attempt-N.json`) was rejected and it has 4 judged attempts: batch reports it
-and leaves it alone. Fix its caption, then run `make batch room=N force=1`. A
-failed attempt (a ComfyUI error, a timeout, Ctrl-C) has no record and never
-counts: batch retries that room on every run and exits 1.
+A room is **STUCK** when its latest judged attempt (one with a record — see
+Outputs below) was rejected and it has had 4 judged attempts: batch reports
+it and leaves it alone. Fix its caption, then run `make batch room=N
+force=1`. A failed attempt (a ComfyUI error, a timeout, Ctrl-C) has no
+record and never counts, so a room only failing on infrastructure is
+retried on every run instead, and batch exits 1.
 
 To restart a room from scratch, delete `data/rooms-ai/.quality/room_NNN/`
-**and** its entry in `reviews.yaml`, then run `make batch room=N force=1`. A
-leftover review entry becomes current again once the new attempts reach its
-attempt number, so deleting only the folder is not enough.
+**and** its entry in `reviews.yaml` — a leftover entry becomes current again
+once new attempts reach its attempt number — then run
+`make batch room=N force=1`.
 
 ## Outputs and the audit folder
 
