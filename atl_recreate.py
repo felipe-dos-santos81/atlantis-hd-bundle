@@ -38,7 +38,8 @@ import room_geometry
 import source_tree
 from prompts import (PAINTED_NEGATIVE, SEAM_NOTE, caption_room, render_prompt, vlm_is_serving,
                      window_note)
-from rooms_file import RoomEntry, RoomsFileError, check_coverage, load_rooms, save_rooms
+from rooms_file import (Review, RoomEntry, RoomsFileError, check_coverage, load_reviews,
+                        load_rooms, save_reviews, save_rooms)
 from source_tree import SourceError
 
 REPO = Path(__file__).resolve().parent
@@ -317,7 +318,208 @@ def memory_available_gb(meminfo=Path("/proc/meminfo")):
     raise RuntimeError(f"MemAvailable not found in {meminfo}")
 
 
+def comfy_preflight(workflow, no_memory_check):
+    """None when ComfyUI answers, has the model files, knows the node classes
+    and there is memory to render; else fail(...)'s exit code."""
+    if not comfy_client.is_up(COMFY_URL):
+        return fail(f"ComfyUI is not answering at {COMFY_URL} - start it first (make server)")
+    missing = comfy_client.missing_model_files(workflow, COMFY_DIR)
+    if missing:
+        return fail(f"ComfyUI is missing model files under {COMFY_DIR}:\n  " + "\n  ".join(missing))
+    unknown = comfy_client.missing_nodes(workflow, COMFY_URL)
+    if unknown:
+        return fail(f"ComfyUI at {COMFY_URL} does not know {', '.join(unknown)} - update the "
+                    f"checkout (git -C {COMFY_DIR} pull) and restart it")
+    if not no_memory_check:
+        available = memory_available_gb()
+        if available < MEMORY_FLOOR_GB:
+            return fail(f"only {available:.0f} GB of memory available, a render needs about "
+                        f"{MEMORY_FLOOR_GB} GB: stop vLLM first (or pass --no-memory-check)")
+    return None
+
+
+def room_status(args, room, reviews):
+    """(status, latest attempt) of a scene or insert room:
+    new       never attempted
+    failed    the latest attempt never finished (it has no record)
+    rejected  the latest attempt failed the geometry gate, or its review rejected it
+    missing   promoted and not rejected, but the output file is gone
+    done      promoted and not rejected (reviewed, or waiting for review)
+    """
+    audit = audit_dir(args.dst, room)
+    attempt = latest_attempt(audit)
+    if attempt == 0:
+        return "new", 0
+    record = read_record(audit, attempt)
+    if record is None:
+        return "failed", attempt
+    review = reviews.get(room.key)
+    if not record.get("promoted") or (review is not None and not review.accepted
+                                      and review.attempt >= attempt):
+        return "rejected", attempt
+    if not (args.dst / room.out_name).is_file():
+        return "missing", attempt
+    return "done", attempt
+
+
+def write_nearest(args, room):
+    """A skip room's output: its source enlarged 4x, nearest neighbour."""
+    indexed = source_tree.open_indexed(args.src, room)
+    save_image_atomic(indexed.convert("RGB").resize(room.out_size, Image.Resampling.NEAREST),
+                      args.dst / room.out_name)
+
+
+def plan_line(args, room, entry, corrections):
+    """One dry-run line: the room's size, windows, wraparound, margins and corrections."""
+    plan = room_geometry.plan_room(source_tree.open_indexed(args.src, room))
+    w, h = room.out_size
+    line = (f"  render  {room.key} {entry.kind:6} -> {w}x{h}  windows "
+            + " ".join(f"{win.x0}-{win.x1}" for win in plan.windows))
+    extras = []
+    if plan.wrap:
+        extras.append(f"wrap {plan.wrap.period}+{plan.wrap.span} (seam window)")
+    m = plan.margins
+    if m.left or m.right or m.top or m.bottom:
+        extras.append(f"margins L{m.left} R{m.right} T{m.top} B{m.bottom}")
+    if corrections:
+        extras.append(f"{len(corrections)} correction(s)")
+    return line + ("  " + "; ".join(extras) if extras else "")
+
+
+def stuck_line(room):
+    return (f"  STUCK   {room.key}: rejected {MAX_ATTEMPTS} times - fix its caption in "
+            f"rooms.yaml, then: make batch room={room.number} force=1")
+
+
+def cmd_batch(args):
+    workflow = comfy_client.WORKFLOWS[args.workflow]
+    rooms = selection(args)
+    entries = load_entries(args)
+    reviews = load_reviews(args.reviews, optional=True)
+    copies, work, stuck, uncaptioned = [], [], [], []
+    done = 0
+    for room in rooms:
+        entry = entries[room.key]
+        if entry.kind == "skip":
+            if args.force or not (args.dst / room.out_name).is_file():
+                copies.append(room)
+            else:
+                done += 1
+            continue
+        status, attempt = room_status(args, room, reviews)
+        if not args.force and status == "done":
+            done += 1
+            continue
+        if not args.force and status == "rejected" and attempt >= MAX_ATTEMPTS:
+            stuck.append(room)
+            continue
+        if not entry.caption.strip():
+            uncaptioned.append(room.key)
+            continue
+        review = reviews.get(room.key)
+        rejected = status == "rejected" and review is not None and not review.accepted
+        work.append((room, entry, list(review.issues) if rejected else []))
+
+    print(f"workflow: {workflow.name}  match strength: {args.match_strength}")
+    print(f"{len(rooms)} room(s): render {len(work)}, copy {len(copies)} (kind skip), "
+          f"done {done}, stuck {len(stuck)}")
+    if args.dry_run:
+        for room in copies:
+            w, h = room.out_size
+            print(f"  copy    {room.key} skip   -> {w}x{h} nearest")
+        for room, entry, corrections in work:
+            try:
+                print(plan_line(args, room, entry, corrections))
+            except ValueError as error:
+                print(f"  ERROR   {room.key}: {error}")
+        for key in uncaptioned:
+            print(f"  NOCAPTION {key} - run: make caption")
+        for room in stuck:
+            print(stuck_line(room))
+        return 0
+    if uncaptioned:
+        return fail(f"{len(uncaptioned)} selected room(s) have no caption in {args.rooms_file} "
+                    "- run: make caption\n  " + "\n  ".join(uncaptioned))
+    for room in copies:
+        write_nearest(args, room)
+        print(f"  copy    {room.key} (nearest 4x)")
+    if not work:
+        for room in stuck:
+            print(stuck_line(room), file=sys.stderr)
+        return 1 if stuck else 0
+
+    code = comfy_preflight(workflow, args.no_memory_check)
+    if code is not None:
+        return code
+    # ComfyUI keeps its models loaded after rendering (~40 GB); free them on the
+    # way out, even after a failure, so vLLM has room to start for `make review`.
+    try:
+        promoted = rejected = failed = 0
+        for i, (room, entry, corrections) in enumerate(work, 1):
+            note = f" with {len(corrections)} correction(s)" if corrections else ""
+            print(f"[{i}/{len(work)}] render {room.key} ({entry.kind}){note}", flush=True)
+            try:
+                attempt, result = render_room(args, workflow, room, entry, corrections)
+            except Exception as error:
+                failed += 1
+                swept = comfy_client.sweep_outputs(room.key, COMFY_DIR)
+                extra = f" (removed {swept} stray output file(s))" if swept else ""
+                print(f"  ERROR rendering {room.key}: {error}{extra}", file=sys.stderr, flush=True)
+                continue
+            if result.passed:
+                promoted += 1
+                print(f"  promoted attempt {attempt}", flush=True)
+                continue
+            rejected += 1
+            reviews[room.key] = Review(attempt, False, result.issues, "geometry")
+            save_reviews(args.reviews, reviews)
+            print(f"  rejected attempt {attempt}: " + "; ".join(result.issues), flush=True)
+            if attempt >= MAX_ATTEMPTS:
+                stuck.append(room)
+        for room in stuck:
+            print(stuck_line(room), file=sys.stderr)
+        print(f"done: promoted={promoted} rejected={rejected} failed={failed} "
+              f"copied={len(copies)} done={done} stuck={len(stuck)}")
+        return 1 if failed or stuck else 0
+    finally:
+        try:
+            comfy_client.free_models(COMFY_URL)
+        except Exception as error:
+            print(f"warning: failed to free ComfyUI's models: {error}", file=sys.stderr)
+
+
 # ---- command line -----------------------------------------------------------
+
+def default_workflow(environ=os.environ):
+    """--workflow when the flag is absent: ATL_WORKFLOW or comfy_client.DEFAULT_WORKFLOW."""
+    name = environ.get("ATL_WORKFLOW") or comfy_client.DEFAULT_WORKFLOW
+    if name not in comfy_client.WORKFLOWS:
+        raise UsageError(f"ATL_WORKFLOW={name!r} is not a workflow; choose one of "
+                         + ", ".join(sorted(comfy_client.WORKFLOWS)))
+    return name
+
+
+def match_strength(text):
+    """argparse type for --match-strength: a number from 0 to 1."""
+    try:
+        value = float(text)
+    except ValueError:
+        value = -1.0
+    if not 0 <= value <= 1:
+        raise argparse.ArgumentTypeError(f"{text} is not a number from 0 to 1")
+    return value
+
+
+def default_match_strength(environ=os.environ):
+    """--match-strength when the flag is absent: ATL_MATCH_STRENGTH or DEFAULT_MATCH_STRENGTH."""
+    text = environ.get("ATL_MATCH_STRENGTH")
+    if not text:
+        return DEFAULT_MATCH_STRENGTH
+    try:
+        return match_strength(text)
+    except argparse.ArgumentTypeError as error:
+        raise UsageError(f"ATL_MATCH_STRENGTH: {error}") from error
+
 
 def build_parser():
     ap = argparse.ArgumentParser(description=__doc__,
@@ -342,6 +544,24 @@ def build_parser():
     caption.add_argument("--force", action="store_true",
                          help="re-caption rooms that already have a caption")
     caption.set_defaults(func=cmd_caption)
+
+    batch = sub.add_parser("batch", help="render captioned rooms through ComfyUI")
+    common(batch)
+    batch.add_argument("--dry-run", action="store_true",
+                       help="print the plan without contacting ComfyUI or writing files")
+    batch.add_argument("--no-memory-check", action="store_true",
+                       help=f"skip the {MEMORY_FLOOR_GB} GB available-memory guard")
+    batch.add_argument("--force", action="store_true",
+                       help="render the selected rooms again, even when done or stuck")
+    batch.add_argument("--match-strength", type=match_strength, default=default_match_strength(),
+                       metavar="X",
+                       help="how far each render moves toward its source's colours, 0 to 1 "
+                            "(default: %(default)s, or ATL_MATCH_STRENGTH)")
+    batch.add_argument("--workflow", choices=sorted(comfy_client.WORKFLOWS),
+                       default=default_workflow(), metavar="NAME",
+                       help="render workflow: " + ", ".join(sorted(comfy_client.WORKFLOWS))
+                            + " (default: %(default)s, or ATL_WORKFLOW)")
+    batch.set_defaults(func=cmd_batch)
 
     verify = sub.add_parser("verify", help="audit the output tree against the manifest, the 4x "
                                            "rule and the attempt records")

@@ -253,5 +253,167 @@ class RenderRoomTests(DriverFixture):
         self.assertIn("the lamp moved", stub.render.call_args.kwargs["positive"])
 
 
+class BatchTests(DriverFixture):
+    def batch(self, *extra, render=None, **stub):
+        with testkit.comfy_stub(comfy_dir=self.comfy_dir, render=render or testkit.fake_render(),
+                                **stub) as mocks:
+            code, out, err = self.run_cli("batch", *extra)
+        return code, out, err, mocks
+
+    def test_dry_run_plans_without_comfyui(self):
+        code, out, _, mocks = self.batch("--dry-run")
+        self.assertEqual(code, 0)
+        self.assertIn("render  room_002 scene  -> 2272x576  windows 0-320 248-568", out)
+        self.assertIn("wrap 840+224 (seam window); margins L0 R88 T0 B0", out)
+        self.assertIn("copy    room_004 skip   -> 64x800 nearest", out)
+        mocks.is_up.assert_not_called()
+        mocks.render.assert_not_called()
+        self.assertFalse(self.dst.exists())
+
+    def test_renders_copies_and_verifies(self):
+        code, out, err, mocks = self.batch()
+        self.assertEqual(code, 0, err)
+        self.assertIn("done: promoted=3 rejected=0 failed=0 copied=1", out)
+        mocks.freed.assert_called_once()
+        self.assertEqual(self.run_cli("verify")[0], 0)
+
+    def test_a_second_run_has_nothing_to_do(self):
+        self.batch()
+        code, out, _, mocks = self.batch()
+        self.assertEqual(code, 0)
+        mocks.render.assert_not_called()
+        mocks.is_up.assert_not_called()
+        self.assertIn("render 0, copy 0 (kind skip), done 4", out)
+
+    def test_uncaptioned_rooms_stop_the_batch(self):
+        testkit.write_rooms(self.rooms_file, caption="")
+        code, _, err, mocks = self.batch()
+        self.assertEqual(code, 2)
+        self.assertIn("run: make caption", err)
+        mocks.render.assert_not_called()
+        code, out, _, _ = self.batch("--dry-run")
+        self.assertEqual(code, 0)
+        self.assertIn("NOCAPTION room_001", out)
+
+    def test_preflight(self):
+        cases = {"down": ({"up": False}, "ComfyUI is not answering"),
+                 "models": ({"missing": ["models/vae/x.safetensors"]}, "models/vae/x.safetensors"),
+                 "nodes": ({"nodes": ["DifferentialDiffusion"]}, "does not know DifferentialDiffusion"),
+                 "memory": ({"mem": 20.0}, "stop vLLM first")}
+        for name, (stub, message) in cases.items():
+            with self.subTest(name):
+                code, _, err, mocks = self.batch("--room", "1", **stub)
+                self.assertEqual(code, 2)
+                self.assertIn(message, err)
+                mocks.render.assert_not_called()
+        code, _, _, _ = self.batch("--room", "1", "--no-memory-check", mem=20.0)
+        self.assertEqual(code, 0)
+
+    def test_a_geometry_rejection_is_retried_with_its_issues(self):
+        code, out, _, _ = self.batch("--room", "1", render=testkit.fake_render(testkit.shift_right))
+        self.assertEqual(code, 0)
+        self.assertIn("rejected attempt 1: geometry: the room is shifted", out)
+        review = load_reviews(self.reviews)["room_001"]
+        self.assertEqual((review.attempt, review.accepted, review.source), (1, False, "geometry"))
+        code, out, _, mocks = self.batch("--room", "1")
+        self.assertEqual(code, 0)
+        self.assertIn("promoted attempt 2", out)
+        self.assertIn("geometry: the room is shifted", mocks.render.call_args.kwargs["positive"])
+
+    def test_a_review_rejection_is_retried(self):
+        self.batch()
+        save_reviews(self.reviews, {"room_002": Review(1, False, ("window 2: the awning moved; "
+                                                                  "move it back",))})
+        _, _, _, mocks = self.batch()
+        self.assertEqual({c.kwargs["name"] for c in mocks.render.call_args_list},
+                         {"room_002_window-1", "room_002_window-2"})
+        self.assertIn("the awning moved", mocks.render.call_args.kwargs["positive"])
+
+    def test_a_room_rejected_max_attempts_times_waits(self):
+        for _ in range(a.MAX_ATTEMPTS):
+            self.batch("--room", "1", render=testkit.fake_render(testkit.shift_right))
+        code, _, err, mocks = self.batch("--room", "1")
+        self.assertEqual(code, 1)
+        mocks.render.assert_not_called()
+        self.assertIn("STUCK   room_001: rejected 4 times", err)
+        code, out, _, _ = self.batch("--room", "1", "--force")
+        self.assertEqual(code, 0)
+        self.assertIn("promoted attempt 5", out)
+
+    def test_a_failed_room_does_not_stop_the_others(self):
+        good = testkit.fake_render()
+
+        def render(workflow, **kw):
+            if kw["name"].startswith("room_001"):
+                raise RuntimeError("ComfyUI execution failed: boom")
+            return good(workflow, **kw)
+        code, _, err, mocks = self.batch(render=render, swept=2)
+        self.assertEqual(code, 1)
+        self.assertIn("ERROR rendering room_001: ComfyUI execution failed: boom "
+                      "(removed 2 stray output file(s))", err)
+        mocks.sweep.assert_called_once_with("room_001", self.comfy_dir)
+        self.assertTrue((self.dst / "room_002.png").is_file())
+        mocks.freed.assert_called_once()
+
+    def test_an_interrupted_room_starts_over_as_a_new_attempt(self):
+        # Review Focus: a crash or timeout mid-room, then a rerun.
+        good = testkit.fake_render()
+
+        def render(workflow, **kw):
+            if kw["name"] == "room_002_window-2":
+                raise TimeoutError("no history for p1 within 1800s")
+            return good(workflow, **kw)
+        self.batch("--room", "2", render=render)
+        audit = self.dst / ".quality" / "room_002"
+        self.assertTrue((audit / "attempt-1.tiles" / "window-1.png").is_file())
+        self.assertFalse((audit / "attempt-1.json").exists())
+        code, out, _, _ = self.batch("--room", "2")
+        self.assertEqual(code, 0)
+        self.assertIn("promoted attempt 2", out)
+        self.assertEqual(self.run_cli("verify", "--room", "2")[0], 0)
+
+    def test_a_flat_room_marked_scene_fails_cleanly(self):
+        # Review Focus: a hand edit gives a placeholder a scene kind.
+        testkit.write_rooms(self.rooms_file, kinds={4: "scene"})
+        code, _, err, _ = self.batch("--room", "4")
+        self.assertEqual(code, 1)
+        self.assertIn("ERROR rendering room_004: the room is one flat colour", err)
+
+    def test_skip_rooms_are_written_once(self):
+        path = self.dst / "room_004.png"
+        self.batch("--room", "4")
+        with Image.open(path) as im:
+            self.assertEqual((im.size, im.getpixel((0, 0))), ((64, 800), (0, 0, 0)))
+        Image.new("RGB", (64, 800), "red").save(path)
+        self.batch("--room", "4")
+        with Image.open(path) as im:
+            self.assertEqual(im.getpixel((0, 0)), (255, 0, 0))
+        self.batch("--room", "4", "--force")
+        with Image.open(path) as im:
+            self.assertEqual(im.getpixel((0, 0)), (0, 0, 0))
+
+    def test_a_deleted_output_is_rendered_again(self):
+        self.batch("--room", "1")
+        (self.dst / "room_001.png").unlink()
+        _, out, _, _ = self.batch("--room", "1")
+        self.assertIn("promoted attempt 2", out)
+
+    def test_workflow_and_strength_are_recorded(self):
+        self.batch("--room", "1", "--workflow", "qwen-image-2.1-i2i", "--match-strength", "0")
+        record = self.record(1)
+        self.assertEqual((record["workflow"], record["match"]["strength"]),
+                         ("qwen-image-2.1-i2i", 0.0))
+        with self.assertRaises(SystemExit):
+            self.batch("--match-strength", "1.5")
+
+    def test_a_bad_environment_default(self):
+        for name, value, message in (("ATL_WORKFLOW", "nope", "ATL_WORKFLOW='nope' is not a workflow"),
+                                     ("ATL_MATCH_STRENGTH", "2", "ATL_MATCH_STRENGTH: 2 is not")):
+            with self.subTest(name), patch.dict(os.environ, {name: value}):
+                code, _, err, _ = self.batch("--dry-run")
+                self.assertEqual(code, 2)
+                self.assertIn(message, err)
+
+
 if __name__ == "__main__":
     unittest.main()
