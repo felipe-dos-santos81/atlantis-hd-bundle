@@ -581,8 +581,8 @@ def cmd_review(args):
         return fail(f"vLLM is not serving {VLM_MODEL} at {VLM_BASE_URL} - start it first")
     try:
         comfy_client.free_models(COMFY_URL)     # give the VLM room; ComfyUI may be down
-    except Exception:
-        pass
+    except Exception as error:
+        print(f"warning: failed to free ComfyUI's models: {error}", file=sys.stderr)
     reviews = load_reviews(args.reviews, optional=True)
     accepted = rejected = skipped = failed = 0
     for i, room in enumerate(rooms, 1):

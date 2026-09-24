@@ -140,6 +140,9 @@ def load_reviews(path, optional=False):
         where = f"{Path(path)}: {key}"
         if not isinstance(entry, dict):
             raise RoomsFileError(f"{where}: expected a mapping")
+        unknown = sorted(set(entry) - {"attempt", "accepted", "issues", "source"})
+        if unknown:
+            raise RoomsFileError(f"{where}: unknown field(s) {', '.join(unknown)}")
         attempt, accepted = entry.get("attempt"), entry.get("accepted")
         issues, source = entry.get("issues"), entry.get("source", "review")
         if type(attempt) is not int or attempt < 0:

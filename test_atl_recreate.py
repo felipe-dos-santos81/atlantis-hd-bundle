@@ -582,8 +582,9 @@ class ReviewTests(DriverFixture):
     def test_a_down_comfyui_does_not_stop_the_review(self):
         with testkit.vlm_stub(review=lambda *a: {"accepted": True, "issues": []},
                               free=RuntimeError("connection refused")):
-            code, _, _ = self.run_cli("review", "--room", "1")
+            code, _, err = self.run_cli("review", "--room", "1")
         self.assertEqual(code, 0)
+        self.assertIn("warning: failed to free ComfyUI's models: connection refused", err)
 
 
 @testkit.needs_real_corpus

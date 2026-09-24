@@ -105,6 +105,8 @@ class ReviewsTests(unittest.TestCase):
                               '"accepted" contradicts "issues"'),
             "source": ("attempt: 1\n  accepted: true\n  issues: []\n  source: human",
                        '"source" must be one of review, geometry'),
+            "field": ("attempt: 1\n  accepted: true\n  issues: []\n  sorce: review",
+                      r"room_001: unknown field\(s\) sorce"),
         }
         for name, (body, message) in cases.items():
             with self.subTest(name):
