@@ -189,8 +189,36 @@ Two test classes run on the real corpus, whenever `../atlantis-textures/out`
 
 ## 6. Live checks and the spike
 
-Not run yet. Task 17 of the plan records the first live render of each graph
-here; Task 18 records the spike's decisions (the default workflow and its
+**Live check (2026-09-24, GB10).** Both graphs render, which the template
+tests could not prove; no graph fix was needed. vLLM (`Qwen/Qwen3.8-27B`,
+570 s to load) captioned the spike rooms 1, 29, 47, 52, 58, 85 and 95 with no
+failures. Five captions needed a hand correction against the room image:
+- room 1 has a pot-bellied stove, not a "cylindrical tank";
+- room 47's portrait caption is "Dr. Hans Ubermann", which the VLM read as
+  "Debian: Dreemann";
+- room 52's skeleton is painted in, and its blue-green shaft is a waterfall;
+- room 58's "two human figures" are two dark-red Minoan columns;
+- room 95 is the open sea, not an "abstract texture".
+
+Read every caption before a batch.
+
+Seed 42, match strength 0.5:
+- `qwen-edit-2511-canny`, room 1: 309.5 s a window. Rejected by the gate:
+  shift −0.96, +0.80 native px over the room and its window; edge agreement
+  0.88. It is a faithful painted HD repaint, slightly displaced: the drift the
+  gate exists to catch.
+- `qwen-image-2.1-i2i`, room 1: 65.3 s a window. Promoted: shift +0.003,
+  −0.005; edge agreement 1.0. At denoise 0.6 it reads as a clean upscale more
+  than a repaint.
+- `qwen-image-2.1-i2i`, room 29 (two windows): 41.9 s a window. Promoted:
+  window shifts under 0.01 px, window agreements 0.9999, seam ratio 1.18. The
+  second window continues the first one's painting across the overlap
+  (native columns 248–320) with no visible join.
+
+The spike weighs the 2511 drift (its ControlNet strength, `REFERENCE`,
+`MAX_SHIFT`) against the 2.1 fidelity (its denoise).
+
+Task 18 records the spike's decisions (the default workflow and its
 strength or denoise, the de-dither method, `REFERENCE`,
 `WINDOW_WIDTH`/`WINDOW_OVERLAP`, `MIN_EDGE_AGREEMENT`, the colour-match
 strength) with their evidence.

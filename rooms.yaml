@@ -1,6 +1,68 @@
 room_001:
   kind: scene
-  caption: ''
+  caption: >-
+    SCENE: Interior of a cluttered, dilapidated workshop or storage room. The atmosphere is dusty and abandoned, with peeling green wallpaper and exposed wooden ceiling beams.
+
+
+    VIEW: Eye-level side profile view. Standard 2D adventure game perspective looking straight across the room from left to right.
+
+
+    LAYOUT:
+
+    Left (0-0.3): A tall, dark wooden shelving unit filled with miscellaneous objects sits against the wall. Next to it are two tall, arched windows with bright light streaming in. Below the windows is a workbench with small jars and tools.
+
+    Center (0.3-0.6): A black cast-iron pot-bellied stove stands near the window line, its flue pipe rising to the ceiling ductwork. To its right is a closed wooden door with a glass panel. At the center a desk holds a small dark statuette.
+
+    Right (0.6-1.0): Two lighter-colored wooden shelving units stand side-by-side. The left one has a ladder leaning against its front face. The shelves contain boxes and various items. Further right is another cabinet structure and a broom leaning against the far wall.
+
+    Foreground (Bottom 0.7-1.0): A deep-shadow foreground: the dark silhouettes of a desk, a chair, and a large round wooden tub.
+
+
+    OBJECTS:
+
+    *   Shelving units: Three main structures (one dark left, two light right).
+
+    *   Windows: Two arched windows, open or clear, showing green foliage outside.
+
+    *   Door: One central wooden door, closed.
+
+    *   Furniture: Workbench under windows, crates in foreground.
+
+    *   Props: Pot-bellied stove with flue pipe, statuette on the desk, ladder, hanging lamps, a white enamel appliance on the right-hand table, round tub in the foreground.
+
+
+    LIGHTING:
+
+    Primary light sources are the three hanging pendant lamps (conical shades) casting warm yellow pools of light downwards. Secondary light comes from the windows on the left, which are very bright (blown out white/green). The foreground bottom area is in deep shadow. Shadows fall directly beneath objects and hangings.
+
+
+    PALETTE:
+
+    *   Walls: Muted sage green, heavily textured/peeling.
+
+    *   Woodwork: Ranges from dark brown (left shelf, floor) to medium tan (right shelves, door).
+
+    *   Ceiling: Dark brown beams, grey ductwork.
+
+    *   Accents: Bright white/green (windows), black iron (stove), metallic grey (lamps), rust orange/brown (debris).
+
+
+    TEXT: none
+
+
+    INVARIANTS:
+
+    *   The vertical alignment of the windows relative to the left shelf.
+
+    *   The position of the stove between the windows and the door.
+
+    *   The ladder leaning specifically against the middle-right shelf unit.
+
+    *   The horizontal division between the lit floor and the dark foreground silhouettes.
+
+    *   The specific placement of the three hanging lamps across the upper third of the image.
+
+    *   No people.
 room_002:
   kind: scene
   caption: ''
@@ -84,7 +146,51 @@ room_028:
   caption: ''
 room_029:
   kind: scene
-  caption: ''
+  caption: >-
+    SCENE: Exterior daytime Middle Eastern market square. Flat-roofed mud-brick and plaster buildings, crenellated parapets, minarets with gold finials, arched doorways, and a dirt plaza.
+
+
+    VIEW: Eye-level, wide panoramic perspective looking across the open square toward the building line; slight downward tilt showing the ground plane.
+
+
+    LAYOUT:
+
+    *   Foreground (0.0-1.0): Dirt ground surface. Bottom-left corner (x~0.05, y~0.9) features a blue tent roof edge. Bottom-right corner (x~0.9, y~0.85) shows the angled wooden top of a market stall.
+
+    *   Mid-ground Left (x~0.0-0.4): A cluster of stalls. Far left (x~0.05) is a stack of clay pots next to a red awning. Center-left (x~0.2) is a large flower stall with a striped canopy, filled with yellow, orange, and purple blooms in baskets. Behind this (x~0.35) stands a tall, square brick tower with vertical slit windows and a white base.
+
+    *   Mid-ground Right (x~0.45-1.0): A continuous row of shops. At x~0.5 is a stone tower with a blue-trimmed, red-slatted gate. Adjacent (x~0.6) are storefronts with red-and-white striped awnings and dark green tiled walls. Further right (x~0.75) is an archway leading into a shaded alley. At x~0.85 stands a small, standalone blue kiosk with a red pyramidal roof. Far right (x~0.95) features a large, pale pink building with a pointed horseshoe arch entrance.
+
+    *   Background (0.0-1.0): Distant hazy mountains visible above the rooftops on the left and center.
+
+
+    OBJECTS:
+
+    *   **Flower Stall:** Large structure at x~0.2, featuring a beige/white striped canvas roof supported by wooden posts. The interior is dark, but the front is densely packed with potted flowers.
+
+    *   **Brick Tower:** Tall, unadorned tan brick structure at x~0.35 with narrow vertical window slits.
+
+    *   **Stone Gatehouse:** Two-story stone structure at x~0.5 with a prominent blue horseshoe arch framing a red wooden gate with vertical bars.
+
+    *   **Shopfronts:** Buildings at x~0.6-0.7 have red-and-white striped awnings. Goods (rugs, pottery) are piled on the ground in front.
+
+    *   **Blue Kiosk:** Small rectangular booth at x~0.85 with vertical blue paneling and a red roof.
+
+    *   **Archways:** Multiple entrances: a dark arch at x~0.75 and a large, light-colored arch at x~0.95.
+
+    *   **Minarets:** Two slender towers topped with gold domes/finials are visible in the background skyline (one at x~0.3, one at x~0.8).
+
+
+    LIGHTING: Bright, direct overhead sunlight. Shadows are cast sharply to the right and slightly forward from objects (e.g., under the flower stall canopy, behind the kiosk). The scene is evenly exposed with high contrast between sunlit facades and deep shadows within archways.
+
+
+    PALETTE: Dominant earth tones—tan, ochre, beige, and terracotta for the architecture. Accents include the bright blue of the tent and kiosk, the red of awnings and gates, the gold of the minaret tops, and the varied yellows/purples of the flowers. The sky is a pale, washed-out blue.
+
+
+    TEXT: None.
+
+
+    INVARIANTS: The specific arrangement of the flower stall in front of the brick tower, the sequence of the stone gatehouse followed by the striped-awning shops, and the isolation of the blue kiosk near the far-right archway must be maintained. The relative heights of the foreground tents/stalls versus the mid-ground buildings define the depth.
 room_030:
   kind: scene
   caption: ''
@@ -132,7 +238,63 @@ room_046:
   caption: ''
 room_047:
   kind: insert
-  caption: ''
+  caption: >-
+    SCENE: A close-up insert of a printed newspaper page. The paper has a grey, grainy texture with faint horizontal lines suggesting newsprint.
+
+
+    VIEW: Flat, head-on perspective. No visible depth or vanishing points; the surface is parallel to the viewer.
+
+
+    LAYOUT:
+
+    *   **Headline (0.1–0.75, 0.0–0.3):** Large, bold serif text spanning the upper left and center.
+
+    *   **Byline (0.2–0.4, 0.3):** Small centered text below the headline.
+
+    *   **Left Text Column (0.0–0.1, 0.0–1.0):** Partial column of body text on the far left edge.
+
+    *   **Center Text Column (0.15–0.45, 0.35–1.0):** Dense block of justified body text below the byline.
+
+    *   **Portrait (0.45–0.75, 0.2–0.95):** Rectangular grayscale photograph of an older man's face and shoulders, positioned in the right-center.
+
+    *   **Right Text Columns (0.75–1.0, 0.0–1.0):** Two columns of dense body text on the right side.
+
+    *   **Caption (0.45–0.7, 0.95–1.0):** Small text directly beneath the portrait.
+
+
+    OBJECTS:
+
+    *   **Portrait:** Shows a balding man with round wire-rimmed glasses, wearing a light-colored shirt and dark tie. He faces forward with a neutral expression.
+
+    *   **Newspaper Grid:** Faint vertical rules separate the text columns.
+
+
+    LIGHTING: Uniform, flat illumination across the entire surface. There are no distinct highlights or cast shadows, indicating diffuse lighting typical of a document scan or painting.
+
+
+    PALETTE: Monochromatic. Dominant tones are mid-grey for the paper background, black for all typography and the darkest parts of the portrait, and lighter greys for the highlights on the subject's face and shirt.
+
+
+    TEXT:
+
+    *   "German Wizard Splits Atom" (Top center)
+
+    *   "by HARRY D. WARD" (byline below the headline)
+
+    *   "Dr. Hans Ubermann" (below the portrait)
+
+    *   Body text is present but illegible due to resolution.
+
+
+    INVARIANTS:
+
+    *   The specific layout grid: Headline top-left/center, photo right-of-center, three main text columns flanking the central elements.
+
+    *   The portrait must be a grayscale, front-facing headshot of a bespectacled man.
+
+    *   The font style must remain a heavy, condensed serif for the headline and a standard serif for body text.
+
+    *   The overall aspect ratio and cropping must match the provided frame.
 room_048:
   kind: scene
   caption: ''
@@ -147,7 +309,45 @@ room_051:
   caption: ''
 room_052:
   kind: scene
-  caption: ''
+  caption: >-
+    SCENE: Interior of a ruined stone structure or cavern. The space is dim, enclosed by rough-hewn walls and rubble. Atmosphere is dark and desolate.
+
+
+    VIEW: Eye-level perspective, looking slightly down at the floor. Framing captures a wide section of the room, including two distinct vertical structural elements dividing the view.
+
+
+    LAYOUT:
+
+    - Left third (0 to 0.35): The skeleton of an explorer, painted into the scene, lies on the floor, with a dark red stain beside it and a staff across the floor. Behind the figure, a large pile of broken stone debris rises to mid-height.
+
+    - Center (0.35 to 0.65): A vertical stone pillar stands in the foreground, obscuring the middle ground. Behind it, the floor continues into a recessed area filled with more rubble.
+
+    - Right third (0.65 to 1.0): Another vertical stone pillar stands near the right edge. To its right, a sheet of teal water pours down through a stone doorway from the top of the frame and splashes onto the floor. The surrounding wall is textured stone.
+
+
+    OBJECTS:
+
+    - Skeleton: a dead explorer lying on the floor in a white pith helmet, tan shirt and brown trousers, part of the painted background.
+
+    - Red Stain: a dark red stain beside the skeleton.
+
+    - Rubble: Large piles of grey, jagged stones in the left and center backgrounds.
+
+    - Pillars: Two thick, vertical stone columns divide the scene horizontally.
+
+    - Waterfall: a vertical sheet of teal water in a doorway on the right.
+
+
+    LIGHTING: Very low ambient light. The waterfall on the right is the brightest element; its teal catches faint light against the dark stone. The rest of the scene is in deep shadow, with faint highlights on the tops of the rubble and pillars.
+
+
+    PALETTE: Dominant tones are dark greys and browns for the stone and shadows. Accents include the teal of the waterfall, the dark red of the stain, and the white/tan of the skeleton's helmet and clothing.
+
+
+    TEXT: None.
+
+
+    INVARIANTS: The horizontal division created by the two vertical pillars must remain. The skeleton's position relative to the left rubble pile and the red stain must be preserved. The vertical alignment of the waterfall on the right is critical. The depth layering—foreground pillars, mid-ground rubble, background walls—must be maintained.
 room_053:
   kind: scene
   caption: ''
@@ -165,7 +365,43 @@ room_057:
   caption: ''
 room_058:
   kind: scene
-  caption: ''
+  caption: >-
+    SCENE: Exterior archaeological dig site in a dry, hilly landscape. Ruins of low stone structures and scattered standing stones occupy the midground against eroded hills and blue sky.
+
+
+    VIEW: Wide panoramic view from a slightly elevated, eye-level perspective looking across the site toward the horizon.
+
+
+    LAYOUT:
+
+    - 0.0–0.1 (mid-ground): Low stone wall with a wooden fence running parallel to it; small ruined hut behind the wall.
+
+    - 0.15–0.25 (foreground/mid-ground): A large, rough-hewn stone pillar or broken column base; a tall, curved standing stone slab leans nearby.
+
+    - 0.3–0.4 (mid-ground): A small rectangular stone building with a dark doorway; another tall, flat standing stone slab stands vertically in front of it.
+
+    - 0.45–0.6 (mid-ground): A second similar stone building; a third standing stone slab is visible further back. Two short dark-red Minoan columns stand on a low platform beside it.
+
+    - 0.65–0.75 (foreground/mid-ground): A square stone platform or altar with a central post; a tall, thin rectangular pillar stands to its right.
+
+    - 0.8–1.0 (mid-ground): More low stone walls and ruins; a final small building on the far right.
+
+    Background consists of rolling brown hills with sparse green vegetation (cypress-like trees) under a blue sky with white clouds.
+
+
+    OBJECTS: Multiple ruined stone buildings with open doorways (no doors). Several large standing stones (menhirs) of varying shapes (curved, flat, pillar-like). Wooden fences along some walls. Stone platforms/altars. No windows are clearly visible.
+
+
+    LIGHTING: Bright daylight from above and slightly to the left, casting soft shadows to the right of objects. High exposure in the sky and sunlit ground; darker tones in shadowed areas under structures and within doorways.
+
+
+    PALETTE: Dominant earth tones—sandy beige ground, light grey/tan stone, reddish-brown hills. Sky is bright blue with white clouds. Sparse green accents from trees and bushes. Dark brown/black for doorways and deep shadows.
+
+
+    TEXT: None.
+
+
+    INVARIANTS: The relative positions of the standing stones, ruined buildings, and hills must remain consistent. The two dark-red columns sit at approximately 0.45 horizontal position. No people. The curved shape of the leftmost standing stone and the flat profile of the central ones are key compositional elements. The horizon line remains level across the panorama.
 room_059:
   kind: scene
   caption: ''
@@ -246,7 +482,57 @@ room_084:
   caption: ''
 room_085:
   kind: insert
-  caption: ''
+  caption: >-
+    SCENE: A close-up insert of a massive, curved stone or metal architectural element against a solid black void. The surface is covered in dense, maze-like geometric engravings.
+
+
+    VIEW: Extreme close-up, angled to show the curve of the object sweeping from the lower left toward the upper right.
+
+
+    LAYOUT:
+
+    *   **Curved Band (Foreground/Middle):** Occupies roughly 60% of the frame, arcing from x=0.25, y=1.0 up to x=1.0, y=0.0. It has a thick, rounded outer edge and a flat inner face.
+
+    *   **Engraved Pattern:** Covers the entire flat face of the band. Consists of interconnected rectangular and L-shaped grooves forming a complex labyrinthine pattern.
+
+    *   **Small Protrusion:** Located at x=0.22, y=0.6. A small, blocky structure juts out from the left side of the main band. It contains a tiny, distinct blue pixel or highlight on its top-left corner.
+
+    *   **Background:** Pure black, occupying the negative space around the curve.
+
+
+    OBJECTS:
+
+    *   **Main Structure:** A single, continuous curved slab or wall segment. No doors, windows, or separate furniture are visible.
+
+    *   **Protrusion:** A small, undefined mechanical or architectural attachment on the left flank.
+
+
+    LIGHTING: Flat, diffuse illumination typical of 2D game assets. No strong directional shadows; depth is conveyed through the dark outlines of the engraved grooves and the slightly lighter tone of the raised surfaces.
+
+
+    PALETTE:
+
+    *   **Structure:** Muted olive-grey / sage green base tone.
+
+    *   **Engravings/Outlines:** Dark charcoal or near-black.
+
+    *   **Highlight:** Single bright blue pixel on the protrusion.
+
+    *   **Background:** Absolute black.
+
+
+    TEXT: None.
+
+
+    INVARIANTS:
+
+    *   The specific curvature of the main band must be preserved.
+
+    *   The intricate, non-repeating geometric pattern of the engravings must match the original layout exactly.
+
+    *   The position and shape of the small protrusion with the blue detail on the left must remain identical.
+
+    *   The contrast between the muted grey-green surface and the black background/grooves is essential to the legibility of the pattern.
 room_086:
   kind: insert
   caption: ''
@@ -276,7 +562,31 @@ room_094:
   caption: ''
 room_095:
   kind: scene
-  caption: ''
+  caption: >-
+    SCENE: Open sea seen from above: an unbroken field of rippling deep-blue water. No land, boats or sky.
+
+
+    VIEW: Looking straight down at the water surface. There is no perspective depth; the plane appears to extend infinitely in all directions within the frame.
+
+
+    LAYOUT:
+
+    *   **Surface (0-1 horizontal, 0-1 vertical):** A continuous field covering the entire canvas. Small pale-blue ripple highlights are scattered across medium-blue water. The distribution of these marks is random but evenly spaced. There are no foreground, middle ground, or background layers.
+
+
+    OBJECTS: None. No doors, windows, furniture, or props are present.
+
+
+    LIGHTING: Flat and even. There are no cast shadows, highlights, or gradients indicating a specific light source direction. The exposure is consistent throughout the image.
+
+
+    PALETTE: Monochromatic blue scheme. The base color is a solid, medium azure blue. The texture elements are a slightly lighter, pale blue or cyan.
+
+
+    TEXT: None.
+
+
+    INVARIANTS: The composition is defined entirely by the texture. The repainting must maintain the density, size and orientation of the small pale ripple highlights relative to the medium-blue background. The pattern must remain uniform without clustering or gaps. The boundary between the two shades should be soft, consistent with the low-resolution origin of the reference material.
 room_096:
   kind: scene
   caption: ''
