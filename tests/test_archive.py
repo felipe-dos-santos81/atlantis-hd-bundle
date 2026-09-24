@@ -13,7 +13,6 @@ def test_int_helpers():
 
 
 def test_load_xors_with_0x69(tmp_path):
-    # b"LECF" XOR 0x69
     raw = bytes([b ^ 0x69 for b in b"LECF" + b"\x00\x00\x00\x08"])
     p = tmp_path / "ATLANTIS.001"
     p.write_bytes(raw)
@@ -32,6 +31,5 @@ def test_room_index_real(archive_path):
     idx = a.room_index()
     assert len(idx) == 96
     assert sorted(idx) == list(range(1, 34)) + list(range(35, 38)) + list(range(39, 99))
-    # LOFF offset points at the ROOM block
     assert a.tag(idx[1]) == "ROOM"
     assert a.tag(idx[1] - 8) == "LFLF"
