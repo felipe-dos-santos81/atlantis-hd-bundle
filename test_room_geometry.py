@@ -67,5 +67,48 @@ class GuideTests(unittest.TestCase):
         self.assertEqual((guide.native.mode, guide.full.mode), ("RGB", "RGB"))
 
 
+class MarginTests(unittest.TestCase):
+    def test_right_margin_of_the_wraparound_fixture(self):
+        pixels = testkit.room_pixels(testkit.DEFAULT_ROOMS[2])
+        self.assertEqual(rg.blank_margins(pixels), rg.Margins(0, 88, 0, 0))
+
+    def test_margins_on_every_side(self):
+        pixels = np.zeros((10, 20), np.uint8)       # a black frame ...
+        pixels[3:8, 2:16] = 5                       # ... around content of index 5 ...
+        pixels[4:6, 6:10] = 7                       # ... with some detail
+        self.assertEqual(rg.blank_margins(pixels), rg.Margins(2, 4, 3, 2))
+
+    def test_a_run_needs_one_index_throughout(self):
+        pixels = np.full((4, 8), 3, np.uint8)
+        pixels[:, 0], pixels[:, 1] = 1, 2           # two flat columns of different indices
+        pixels[1, 4] = 9
+        self.assertEqual(rg.blank_margins(pixels).left, 1)
+
+
+class WrapTests(unittest.TestCase):
+    def setUp(self):
+        self.pixels = testkit.room_pixels(testkit.DEFAULT_ROOMS[2])   # wrap (840, 224), 88 margin
+        self.end = 1152 - 88
+
+    def test_finds_the_repeat(self):
+        self.assertEqual(rg.find_wrap(self.pixels, self.end), rg.Wrap(840, 224))
+
+    def test_tolerates_a_few_differences(self):
+        self.pixels[:4, 900:904] = 1                # 16 of 32256 pixels: a 99.95% match
+        self.assertEqual(rg.find_wrap(self.pixels, self.end), rg.Wrap(840, 224))
+
+    def test_needs_nearly_every_pixel(self):
+        self.pixels[:13, 900:905] = 1               # 65 of 32256 pixels: a 99.8% match
+        self.assertIsNone(rg.find_wrap(self.pixels, self.end))
+
+    def test_no_repeat(self):
+        pixels = testkit.room_pixels(testkit.room(9, 1152, 144, right_margin=88))
+        self.assertIsNone(rg.find_wrap(pixels, self.end))
+
+    def test_ignores_a_repeat_closer_than_one_screen(self):
+        pixels = testkit.room_pixels(testkit.room(9, 400, 144, wrap=(200, 200)))
+        self.assertIsNone(rg.find_wrap(pixels, 400))
+
+
 if __name__ == "__main__":
     unittest.main()

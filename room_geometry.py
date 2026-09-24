@@ -73,3 +73,55 @@ def build_guide(indexed, method=DEDITHER_METHOD):
     full = native.resize((native.width * SCALE, native.height * SCALE),
                          Image.Resampling.LANCZOS)
     return Guide(native, full)
+
+
+# ---- margins and wraparound -------------------------------------------------
+
+@dataclass(frozen=True)
+class Margins:
+    left: int               # columns (left, right) or rows (top, bottom) at each edge
+    right: int              # that are all one palette index, the same one throughout
+    top: int
+    bottom: int
+
+
+def _flat_run(lines):
+    """How many leading lines are each one palette index, the same index throughout."""
+    count, value = 0, None
+    for line in lines:
+        if (line != line[0]).any():
+            break
+        if value is None:
+            value = line[0]
+        elif line[0] != value:
+            break
+        count += 1
+    return count
+
+
+def blank_margins(pixels):
+    h, w = pixels.shape
+    return Margins(left=_flat_run(pixels[:, x] for x in range(w)),
+                   right=_flat_run(pixels[:, x] for x in range(w - 1, -1, -1)),
+                   top=_flat_run(pixels[y, :] for y in range(h)),
+                   bottom=_flat_run(pixels[y, :] for y in range(h - 1, -1, -1)))
+
+
+@dataclass(frozen=True)
+class Wrap:
+    period: int             # columns [period, period + span) repeat columns [0, span)
+    span: int
+
+
+def find_wrap(pixels, content_end):
+    """The room's wraparound, or None.
+
+    The smallest period from MIN_WRAP_PERIOD at which columns
+    [period, content_end) repeat columns [0, content_end - period) in at least
+    WRAP_MATCH of their pixels, over at least MIN_WRAP_SPAN columns.
+    """
+    for period in range(MIN_WRAP_PERIOD, content_end - MIN_WRAP_SPAN + 1):
+        span = content_end - period
+        if (pixels[:, period:content_end] == pixels[:, :span]).mean() >= WRAP_MATCH:
+            return Wrap(period, span)
+    return None
