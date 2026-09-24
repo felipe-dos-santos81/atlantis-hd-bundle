@@ -28,3 +28,4 @@ def test_all_96_backgrounds_decode(archive_path):
         bg = extract_background(a, room)
         assert bg.width >= 8 and bg.height > 0
         assert len(bg.pixels) == bg.width * bg.height
+        assert bg.anomalies == [], f"room {room} anomalies: {bg.anomalies}"
