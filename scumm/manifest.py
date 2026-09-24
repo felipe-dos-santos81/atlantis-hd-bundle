@@ -4,7 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 EXPECTED = {"rooms": 96, "backgrounds": 96, "objects": 1372, "costumes": 240, "fonts": 5}
 
@@ -41,9 +41,13 @@ def contact_sheet(items: list[tuple[int, str]], out_path, cell=(320, 200), cols:
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     rows = (len(items) + cols - 1) // cols if items else 1
     sheet = Image.new("RGB", (cell[0] * cols, cell[1] * rows), (0, 0, 0))
-    for i, (_room, file) in enumerate(items):
+    draw = ImageDraw.Draw(sheet)
+    for i, (room, file) in enumerate(items):
+        x = (i % cols) * cell[0]
+        y = (i // cols) * cell[1]
         img = Image.open(file).convert("RGB").resize(cell, Image.NEAREST)
-        sheet.paste(img, ((i % cols) * cell[0], (i // cols) * cell[1]))
+        sheet.paste(img, (x, y))
+        draw.text((x + 2, y + 2), str(room), fill=(255, 255, 0), stroke_width=1, stroke_fill=(0, 0, 0))
     sheet.save(out_path, format="PNG")
 
 

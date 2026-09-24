@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from .archive import Archive, le16
 from .palette import Palette, read_palette
-from .smap import Anomaly, decode_smap
+from .smap import Anomaly, decode_smap, read_codec_ids
 
 
 @dataclass
@@ -16,6 +16,7 @@ class Background:
     pixels: bytearray
     anomalies: list[Anomaly]
     source_offset: int
+    codec_ids: tuple[int, ...]
 
 
 def extract_background(archive: Archive, room_number: int) -> Background:
@@ -39,4 +40,5 @@ def extract_background(archive: Archive, room_number: int) -> Background:
         raise ValueError(f"room {room_number} has no SMAP")
 
     pixels, anomalies = decode_smap(archive.data, smap.start, width, height)
-    return Background(room_number, width, height, palette, pixels, anomalies, smap.start)
+    codec_ids = tuple(read_codec_ids(archive.data, smap.start, width))
+    return Background(room_number, width, height, palette, pixels, anomalies, smap.start, codec_ids)

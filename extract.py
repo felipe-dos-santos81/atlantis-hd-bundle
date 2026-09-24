@@ -6,8 +6,8 @@ from pathlib import Path
 
 from scumm.archive import Archive
 from scumm.export import save_indexed_png, save_palette_swatch
-from scumm.manifest import (build_manifest, contact_sheet, sha256_file,
-                            write_manifest, write_report)
+from scumm.manifest import (EXPECTED, build_manifest, contact_sheet,
+                            sha256_file, write_manifest, write_report)
 from scumm.room import extract_background
 
 
@@ -25,8 +25,6 @@ def main(argv=None) -> int:
     rooms = sorted(archive.room_index())
 
     out = Path(args.out)
-    rooms_dir = out / "indexed" / "rooms"
-    pal_dir = out / "indexed" / "palettes"
     records = []
     anomalies_total = 0
     sheet_items = []
@@ -41,10 +39,12 @@ def main(argv=None) -> int:
         records.append({
             "room": room,
             "name": None,
+            "role": "background",
             "width": bg.width,
             "height": bg.height,
             "transparent_index": bg.palette.transparent_index,
             "source_offset": bg.source_offset,
+            "codec_ids": list(bg.codec_ids),
             "file": img_rel,
             "palette_file": pal_rel,
             "sha256": sha256_file(out / img_rel),
@@ -60,8 +60,8 @@ def main(argv=None) -> int:
     contact_sheet(sheet_items, out / "contact_sheet_backgrounds.png")
     write_report(out / "report.md", manifest)
 
-    print(f"rooms: {len(records)}/{len(rooms)}  anomalies: {anomalies_total}")
-    return 0 if len(records) == len(rooms) else 1
+    print(f"rooms: {len(records)}/{EXPECTED['rooms']}  anomalies: {anomalies_total}")
+    return 0 if len(records) == EXPECTED["rooms"] else 1
 
 
 if __name__ == "__main__":

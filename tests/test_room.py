@@ -11,6 +11,7 @@ def test_room1_metadata(archive_path):
     assert bg.palette.colors[1] == (0, 0, 171)
     assert bg.anomalies == []
     assert bg.source_offset > 0
+    assert set(bg.codec_ids) == {0x1C, 0x44}
 
 
 def test_room1_pixels_vary(archive_path):

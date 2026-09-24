@@ -7,12 +7,6 @@ from PIL import Image
 import extract
 
 
-def _run(tmp_path):
-    out = tmp_path / "out"
-    rc = extract.main(["--game", str(Path(extract.__file__).parent / "tests" / "__none__"), "--out", str(out)])
-    return rc, out
-
-
 def test_cli_end_to_end(archive_path, tmp_path):
     game_dir = str(Path(archive_path).parent)
     out = tmp_path / "out"
@@ -28,6 +22,9 @@ def test_cli_end_to_end(archive_path, tmp_path):
     man = json.loads((out / "manifest.json").read_text())
     assert man["summary"]["backgrounds"] == 96
     assert man["summary"]["anomalies"] == 0
+    by_room = {a["room"]: a for a in man["assets"]}
+    assert by_room[1]["role"] == "background"
+    assert by_room[1]["codec_ids"]
     assert (out / "contact_sheet_backgrounds.png").is_file()
     assert (out / "report.md").is_file()
 
