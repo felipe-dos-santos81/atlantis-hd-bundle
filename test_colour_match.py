@@ -41,8 +41,24 @@ class MatchTests(unittest.TestCase):
         self.assertLessEqual(np.abs(out - render.astype(int)).max(), 1)
 
     def test_a_flat_render(self):
+        # Regression: a "constant" band's float Lab std is ~1e-13, not exactly
+        # 0, so the old `stds > 0` guard let the gain explode.
         out = cm.match(Image.new("RGB", (32, 16), (90, 90, 90)), self.guide, 1.0)
         self.assertEqual((out.size, out.mode), ((32, 16), "RGB"))
+        out_l = cm.lab_stats(out)[0][0]
+        guide_l = cm.lab_stats(self.guide)[0][0]
+        self.assertAlmostEqual(out_l, guide_l, delta=1.0)
+
+    def test_a_greyscale_render_stays_grey(self):
+        # Regression: the same exploding gain turned a grey render's ~0 a*/b*
+        # spread into full guide-chroma noise.
+        rng = np.random.default_rng(1)
+        grey = rng.integers(20, 235, (64, 96), dtype=np.uint8)
+        render = Image.fromarray(np.stack([grey] * 3, axis=-1))
+        out_stds = cm.lab_stats(cm.match(render, self.guide, 1.0))[1]
+        for band, name in ((1, "a*"), (2, "b*")):
+            with self.subTest(band=name):
+                self.assertAlmostEqual(out_stds[band], 0.0, delta=1.0)
 
 
 if __name__ == "__main__":

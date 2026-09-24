@@ -67,6 +67,10 @@ def match(render, guide, strength=1.0):
     lab = _to_lab(render)
     means, stds = _stats(lab)
     target_means, target_stds = lab_stats(guide)
-    gain = np.divide(target_stds, stds, out=np.ones(3), where=stds > 0)
+    # A band that is really constant still has a float64 std of about 1e-12
+    # (the Lab transform's own rounding), not exactly 0; a bare `> 0` guard
+    # let that near-zero std blow the gain up and paint noise onto a flat or
+    # greyscale render.
+    gain = np.divide(target_stds, stds, out=np.ones(3), where=stds > 1e-6)
     moved = (lab - means) * gain + target_means
     return _to_rgb(lab + strength * (moved - lab))
