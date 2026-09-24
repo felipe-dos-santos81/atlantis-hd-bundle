@@ -12,6 +12,8 @@ import hashlib
 import io
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 from PIL import Image
@@ -114,3 +116,28 @@ def run_cli(argv):
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         code = a.main(list(argv))
     return code, out.getvalue(), err.getvalue()
+
+
+_UNSET = object()
+
+
+@contextlib.contextmanager
+def vlm_stub(*, serving=True, caption=None, review=None, free=_UNSET):
+    """Patch the vLLM side of `caption` and `review`: atl_recreate.vlm_is_serving
+    and, when given, a side_effect callable for atl_recreate.caption_room or
+    review_room. Pass `free` (a side_effect, or None for a plain stub) to also
+    patch comfy_client.free_models, which only `review` calls.
+
+    Yields the mocks: serving, and caption, review and freed when requested.
+    """
+    with contextlib.ExitStack() as stack:
+        mocks = SimpleNamespace(
+            serving=stack.enter_context(patch.object(a, "vlm_is_serving", return_value=serving)))
+        if caption is not None:
+            mocks.caption = stack.enter_context(patch.object(a, "caption_room", side_effect=caption))
+        if review is not None:
+            mocks.review = stack.enter_context(patch.object(a, "review_room", side_effect=review))
+        if free is not _UNSET:
+            mocks.freed = stack.enter_context(
+                patch.object(comfy_client, "free_models", side_effect=free))
+        yield mocks

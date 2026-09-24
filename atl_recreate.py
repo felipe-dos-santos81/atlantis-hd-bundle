@@ -29,8 +29,11 @@ from pathlib import Path
 
 from PIL import Image
 
+import comfy_client
+import room_geometry
 import source_tree
-from rooms_file import RoomsFileError, check_coverage, load_rooms
+from prompts import caption_room, vlm_is_serving
+from rooms_file import RoomEntry, RoomsFileError, check_coverage, load_rooms, save_rooms
 from source_tree import SourceError
 
 REPO = Path(__file__).resolve().parent
@@ -165,6 +168,48 @@ def cmd_verify(args):
     return 1 if bad else 0
 
 
+# ---- caption ----------------------------------------------------------------
+
+def caption_images(src, room):
+    """What the VLM sees: the room at 2x, then each window at 4x when there are several."""
+    indexed = source_tree.open_indexed(src, room)
+    rgb = indexed.convert("RGB")
+    images = [rgb.resize((rgb.width * 2, rgb.height * 2), Image.Resampling.NEAREST)]
+    plan = room_geometry.plan_room(indexed)
+    if len(plan.windows) > 1:
+        for win in plan.windows:
+            crop = rgb.crop((win.x0, 0, win.x1, rgb.height))
+            images.append(crop.resize((crop.width * SCALE, crop.height * SCALE),
+                                      Image.Resampling.NEAREST))
+    return images
+
+
+def cmd_caption(args):
+    rooms = selection(args)
+    entries = load_entries(args)
+    if not vlm_is_serving(VLM_BASE_URL, VLM_MODEL, comfy_client.http_json, VLM_API_KEY):
+        return fail(f"vLLM is not serving {VLM_MODEL} at {VLM_BASE_URL} - start it first")
+    done = skipped = failed = 0
+    for i, room in enumerate(rooms, 1):
+        entry = entries[room.key]
+        if entry.kind == "skip" or (entry.caption.strip() and not args.force):
+            skipped += 1
+            continue
+        print(f"[{i}/{len(rooms)}] caption {room.key} ({entry.kind})", flush=True)
+        try:
+            caption = caption_room(caption_images(args.src, room), comfy_client.http_json,
+                                   VLM_BASE_URL, VLM_MODEL, VLM_API_KEY)
+        except Exception as error:
+            failed += 1
+            print(f"  ERROR captioning {room.key}: {error}", file=sys.stderr, flush=True)
+            continue
+        entries[room.key] = RoomEntry(entry.kind, caption)
+        save_rooms(args.rooms_file, entries)
+        done += 1
+    print(f"done: captioned={done} skipped={skipped} failed={failed} -> {args.rooms_file}")
+    return 1 if failed else 0
+
+
 # ---- command line -----------------------------------------------------------
 
 def build_parser():
@@ -184,6 +229,12 @@ def build_parser():
                        help="rooms file (default: %(default)s, or ATL_ROOMS)")
         p.add_argument("--reviews", type=Path, default=REVIEWS_FILE,
                        help="reviews file (default: %(default)s, or ATL_REVIEWS)")
+
+    caption = sub.add_parser("caption", help="write captions into rooms.yaml with the local vLLM")
+    common(caption)
+    caption.add_argument("--force", action="store_true",
+                         help="re-caption rooms that already have a caption")
+    caption.set_defaults(func=cmd_caption)
 
     verify = sub.add_parser("verify", help="audit the output tree against the manifest, the 4x "
                                            "rule and the attempt records")

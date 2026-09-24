@@ -110,5 +110,62 @@ class VerifyTests(DriverFixture):
         self.assertIn("source is not a directory", err)
 
 
+class CaptionTests(DriverFixture):
+    def setUp(self):
+        super().setUp()
+        testkit.write_rooms(self.rooms_file, caption="")
+
+    def test_captions_scene_rooms_and_skips_skip_rooms(self):
+        with testkit.vlm_stub(caption=lambda images, *a: f"SCENE: {len(images)} image(s)") as vlm:
+            code, out, err = self.run_cli("caption")
+        self.assertEqual(code, 0, err)
+        rooms = load_rooms(self.rooms_file)
+        self.assertEqual([rooms[f"room_00{n}"].caption for n in (1, 2, 3)],
+                         ["SCENE: 1 image(s)", "SCENE: 3 image(s)", "SCENE: 5 image(s)"])
+        self.assertEqual(rooms["room_004"], RoomEntry("skip", ""))
+        self.assertEqual(vlm.caption.call_count, 3)
+        self.assertIn("done: captioned=3 skipped=1 failed=0", out)
+
+    def test_the_room_at_2x_then_its_windows_at_4x(self):
+        with testkit.vlm_stub(caption=lambda images, *a: "SCENE: x") as vlm:
+            self.run_cli("caption", "--room", "2")
+        images = vlm.caption.call_args.args[0]
+        self.assertEqual([im.size for im in images], [(1136, 288), (1280, 576), (1280, 576)])
+
+    def test_keeps_existing_captions_unless_forced(self):
+        testkit.write_rooms(self.rooms_file)
+        with testkit.vlm_stub(caption=lambda images, *a: "SCENE: new") as vlm:
+            code, _, _ = self.run_cli("caption")
+        self.assertEqual((code, vlm.caption.call_count), (0, 0))
+        with testkit.vlm_stub(caption=lambda images, *a: "SCENE: new"):
+            self.run_cli("caption", "--force", "--room", "1")
+        self.assertEqual(load_rooms(self.rooms_file)["room_001"].caption, "SCENE: new")
+
+    def test_keeps_the_kind(self):
+        testkit.write_rooms(self.rooms_file, kinds={2: "insert"}, caption="")
+        with testkit.vlm_stub(caption=lambda images, *a: "SCENE: a page"):
+            self.run_cli("caption", "--room", "2")
+        self.assertEqual(load_rooms(self.rooms_file)["room_002"], RoomEntry("insert", "SCENE: a page"))
+
+    def test_refuses_without_vllm(self):
+        with testkit.vlm_stub(serving=False, caption=lambda *a: "x") as vlm:
+            code, _, err = self.run_cli("caption")
+        self.assertEqual(code, 2)
+        self.assertIn("vLLM is not serving", err)
+        vlm.caption.assert_not_called()
+
+    def test_a_failed_caption_does_not_stop_the_others(self):
+        def caption(images, *a):
+            if len(images) == 3:
+                raise ValueError("VLM response was truncated; no result accepted")
+            return "SCENE: ok"
+        with testkit.vlm_stub(caption=caption):
+            code, _, err = self.run_cli("caption")
+        self.assertEqual(code, 1)
+        self.assertIn("ERROR captioning room_002", err)
+        rooms = load_rooms(self.rooms_file)
+        self.assertEqual((rooms["room_001"].caption, rooms["room_002"].caption), ("SCENE: ok", ""))
+
+
 if __name__ == "__main__":
     unittest.main()
