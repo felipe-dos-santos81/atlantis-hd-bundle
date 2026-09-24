@@ -109,6 +109,7 @@ Expected: prints `ok <version>`.
 __pycache__/
 *.pyc
 out/
+.superpowers/
 ```
 
 - [ ] **Step 3: Write `pyproject.toml`**
