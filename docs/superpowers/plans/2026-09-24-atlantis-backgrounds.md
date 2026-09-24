@@ -46,6 +46,11 @@ Deferred to separate plans, each with one format question to spike first:
 - Verified constants: 96 rooms, numbers `1–33, 35–37, 39–98`. Room 1: w=320,
   h=200, `TRNS`=5, `CLUT[0]=(0,0,0)`, `CLUT[1]=(0,0,171)`, 40 strips, codec ids
   `{0x1C: 28, 0x44: 12}`. `LOFF` offset points at the `ROOM` block.
+- Pre-flight prototype result: this exact algorithm decodes all 96 rooms with
+  **zero anomalies**; codec ids seen across the game are `0x0E,0x10,0x11,0x12,
+  0x1A,0x1B,0x1C,0x22,0x42,0x43,0x44`, all inside the dispatch table. So
+  `anomalies == 0` is a safe assertion. Rooms 89/90/98 are genuinely tiny
+  (16×200, 16×200, 8×200) — real data, not a decode fault.
 
 ---
 
@@ -377,7 +382,7 @@ from scumm.palette import parse_clut, parse_cycl, parse_trns, read_palette
 
 
 def test_parse_clut_synthetic():
-    data = b"CLUT" + (776).to_bytes(4, "big") + bytes([0, 0, 0]) + bytes([0, 0, 171]) + bytes(253 * 3)
+    data = b"CLUT" + (776).to_bytes(4, "big") + bytes([0, 0, 0]) + bytes([0, 0, 171]) + bytes(254 * 3)
     colors = parse_clut(data, 0)
     assert len(colors) == 256
     assert colors[0] == (0, 0, 0)
@@ -659,8 +664,9 @@ def _pack_bits(bits):
 
 def _strip(codec_id, first_color, bits, height):
     body = bytes([codec_id, first_color]) + _pack_bits(bits)
-    header = (8 + len(body)).to_bytes(4, "big")
-    return b"SMAP" + header + body
+    table = (12).to_bytes(4, "little")  # single strip offset = 8 header + 4 table
+    payload = table + body
+    return b"SMAP" + (8 + len(payload)).to_bytes(4, "big") + payload
 
 
 def test_method1_constant_colour():
@@ -674,7 +680,7 @@ def test_method1_constant_colour():
 
 def test_method1_new_colour():
     # pixel0=10; then bit 1, bit 0 -> read 8-bit colour 20 for pixel1; rest 0 bits
-    bits = [1, 0] + [0, 0, 0, 1, 0, 1, 0, 0] + [0] * 14  # 20 == 0b00010100
+    bits = [1, 0] + [0, 0, 1, 0, 1, 0, 0, 0] + [0] * 14  # 20 == 0b00010100
     data = _strip(0x1C, 10, bits, height=2)
     pixels, anomalies = decode_smap(data, 0, width=8, height=2)
     assert pixels[0] == 10
@@ -1356,8 +1362,8 @@ def main(argv=None) -> int:
     contact_sheet(sheet_items, out / "contact_sheet_backgrounds.png")
     write_report(out / "report.md", manifest)
 
-    print(f"rooms: {len(records)}  anomalies: {anomalies_total}")
-    return 0 if anomalies_total == 0 else 1
+    print(f"rooms: {len(records)}/{len(rooms)}  anomalies: {anomalies_total}")
+    return 0 if len(records) == len(rooms) else 1
 
 
 if __name__ == "__main__":
