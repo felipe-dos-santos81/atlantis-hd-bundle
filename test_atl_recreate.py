@@ -60,19 +60,19 @@ class VerifyTests(DriverFixture):
                 {"attempt": 1, "promoted": True,
                  "output_sha256": sha or source_tree.file_sha256(path)}))
 
-    def test_everything_missing(self):
-        code, out, _ = self.run_cli("verify")
-        self.assertEqual(code, 1)
-        self.assertIn("MISSING    room_001", out)
-        self.assertIn("verify: 4 room(s), 4 problem(s)", out)
-
-    def test_a_complete_tree_passes(self):
-        for number in (1, 2, 3):
-            self.write_output(number)
-        self.write_output(4, record=False)          # a skip room needs no record
-        code, out, _ = self.run_cli("verify")
-        self.assertEqual(code, 0, out)
-        self.assertIn("verify: 4 room(s), 0 problem(s)", out)
+    def test_verify_reports_missing_then_complete(self):
+        with self.subTest("everything missing"):
+            code, out, _ = self.run_cli("verify")
+            self.assertEqual(code, 1)
+            self.assertIn("MISSING    room_001", out)
+            self.assertIn("verify: 4 room(s), 4 problem(s)", out)
+        with self.subTest("everything present"):
+            for number in (1, 2, 3):
+                self.write_output(number)
+            self.write_output(4, record=False)          # a skip room needs no record
+            code, out, _ = self.run_cli("verify")
+            self.assertEqual(code, 0, out)
+            self.assertIn("verify: 4 room(s), 0 problem(s)", out)
 
     def test_problems_are_named(self):
         self.write_output(1, size=(1280, 575))
@@ -94,21 +94,20 @@ class VerifyTests(DriverFixture):
         self.assertIn("UNRECORDED room_001", out)
         self.assertIn("verify: 1 room(s), 1 problem(s)", out)
 
-    def test_an_unknown_room(self):
-        code, _, err = self.run_cli("verify", "--room", "99")
-        self.assertEqual(code, 2)
-        self.assertIn("not in the manifest: room 99", err)
-
-    def test_rooms_file_must_cover_the_manifest(self):
-        testkit.write_rooms(self.rooms_file, rooms=testkit.DEFAULT_ROOMS[:2])
-        code, _, err = self.run_cli("verify")
-        self.assertEqual(code, 2)
-        self.assertIn("no entry for room_003, room_004", err)
-
-    def test_a_missing_source(self):
-        code, _, err = testkit.run_cli(["verify", "--src", str(self.root / "nope")])
-        self.assertEqual(code, 2)
-        self.assertIn("source is not a directory", err)
+    def test_verify_refuses_bad_arguments(self):
+        with self.subTest("an unknown room"):
+            code, _, err = self.run_cli("verify", "--room", "99")
+            self.assertEqual(code, 2)
+            self.assertIn("not in the manifest: room 99", err)
+        with self.subTest("rooms file must cover the manifest"):
+            testkit.write_rooms(self.rooms_file, rooms=testkit.DEFAULT_ROOMS[:2])
+            code, _, err = self.run_cli("verify")
+            self.assertEqual(code, 2)
+            self.assertIn("no entry for room_003, room_004", err)
+        with self.subTest("a missing source"):
+            code, _, err = testkit.run_cli(["verify", "--src", str(self.root / "nope")])
+            self.assertEqual(code, 2)
+            self.assertIn("source is not a directory", err)
 
 
 class CaptionTests(DriverFixture):
@@ -126,27 +125,25 @@ class CaptionTests(DriverFixture):
         self.assertEqual(rooms["room_004"], RoomEntry("skip", ""))
         self.assertEqual(vlm.caption.call_count, 3)
         self.assertIn("done: captioned=3 skipped=1 failed=0", out)
-
-    def test_the_room_at_2x_then_its_windows_at_4x(self):
-        with testkit.vlm_stub(caption=lambda images, *a: "SCENE: x") as vlm:
-            self.run_cli("caption", "--room", "2")
-        images = vlm.caption.call_args.args[0]
+        # room 2's own request: the room at 2x, then its windows at 4x.
+        images = vlm.caption.call_args_list[1].args[0]
         self.assertEqual([im.size for im in images], [(1136, 288), (1280, 576), (1280, 576)])
 
-    def test_keeps_existing_captions_unless_forced(self):
-        testkit.write_rooms(self.rooms_file)
-        with testkit.vlm_stub(caption=lambda images, *a: "SCENE: new") as vlm:
-            code, _, _ = self.run_cli("caption")
-        self.assertEqual((code, vlm.caption.call_count), (0, 0))
-        with testkit.vlm_stub(caption=lambda images, *a: "SCENE: new"):
-            self.run_cli("caption", "--force", "--room", "1")
-        self.assertEqual(load_rooms(self.rooms_file)["room_001"].caption, "SCENE: new")
-
-    def test_keeps_the_kind(self):
-        testkit.write_rooms(self.rooms_file, kinds={2: "insert"}, caption="")
-        with testkit.vlm_stub(caption=lambda images, *a: "SCENE: a page"):
-            self.run_cli("caption", "--room", "2")
-        self.assertEqual(load_rooms(self.rooms_file)["room_002"], RoomEntry("insert", "SCENE: a page"))
+    def test_keeps_existing_captions_unless_forced_and_keeps_the_kind(self):
+        with self.subTest("keeps existing captions unless forced"):
+            testkit.write_rooms(self.rooms_file)
+            with testkit.vlm_stub(caption=lambda images, *a: "SCENE: new") as vlm:
+                code, _, _ = self.run_cli("caption")
+            self.assertEqual((code, vlm.caption.call_count), (0, 0))
+            with testkit.vlm_stub(caption=lambda images, *a: "SCENE: new"):
+                self.run_cli("caption", "--force", "--room", "1")
+            self.assertEqual(load_rooms(self.rooms_file)["room_001"].caption, "SCENE: new")
+        with self.subTest("keeps the kind"):
+            testkit.write_rooms(self.rooms_file, kinds={2: "insert"}, caption="")
+            with testkit.vlm_stub(caption=lambda images, *a: "SCENE: a page"):
+                self.run_cli("caption", "--room", "2")
+            self.assertEqual(load_rooms(self.rooms_file)["room_002"],
+                             RoomEntry("insert", "SCENE: a page"))
 
     def test_refuses_without_vllm(self):
         with testkit.vlm_stub(serving=False, caption=lambda *a: "x") as vlm:
@@ -288,30 +285,43 @@ class BatchTests(DriverFixture):
             code, out, err = self.run_cli("batch", *extra)
         return code, out, err, mocks
 
-    def test_dry_run_plans_without_comfyui(self):
-        code, out, _, mocks = self.batch("--dry-run")
-        self.assertEqual(code, 0)
-        self.assertIn("render  room_002 scene  -> 2272x576  windows 0-320 248-568", out)
-        self.assertIn("wrap 840+224 (seam window); margins L0 R88 T0 B0", out)
-        self.assertIn("copy    room_004 skip   -> 64x800 nearest", out)
-        mocks.is_up.assert_not_called()
-        mocks.render.assert_not_called()
-        self.assertFalse(self.dst.exists())
-
-    def test_renders_copies_and_verifies(self):
-        code, out, err, mocks = self.batch()
-        self.assertEqual(code, 0, err)
-        self.assertIn("done: promoted=3 rejected=0 failed=0 copied=1", out)
-        mocks.freed.assert_called_once()
-        self.assertEqual(self.run_cli("verify")[0], 0)
-
-    def test_a_second_run_has_nothing_to_do(self):
-        self.batch()
-        code, out, _, mocks = self.batch()
-        self.assertEqual(code, 0)
-        mocks.render.assert_not_called()
-        mocks.is_up.assert_not_called()
-        self.assertIn("render 0, copy 0 (kind skip), done 4", out)
+    def test_batch_dry_run_renders_reruns_and_reacts_to_changes(self):
+        with self.subTest("dry run plans without comfyui"):
+            code, out, _, mocks = self.batch("--dry-run")
+            self.assertEqual(code, 0)
+            self.assertIn("render  room_002 scene  -> 2272x576  windows 0-320 248-568", out)
+            self.assertIn("wrap 840+224 (seam window); margins L0 R88 T0 B0", out)
+            self.assertIn("copy    room_004 skip   -> 64x800 nearest", out)
+            mocks.is_up.assert_not_called()
+            mocks.render.assert_not_called()
+            self.assertFalse(self.dst.exists())
+        with self.subTest("renders, copies and verifies"):
+            code, out, err, mocks = self.batch()
+            self.assertEqual(code, 0, err)
+            self.assertIn("done: promoted=3 rejected=0 failed=0 copied=1", out)
+            mocks.freed.assert_called_once()
+            self.assertEqual(self.run_cli("verify")[0], 0)
+        with self.subTest("a second run has nothing to do"):
+            code, out, _, mocks = self.batch()
+            self.assertEqual(code, 0)
+            mocks.render.assert_not_called()
+            mocks.is_up.assert_not_called()
+            self.assertIn("render 0, copy 0 (kind skip), done 4", out)
+        with self.subTest("a deleted output is rendered again"):
+            (self.dst / "room_001.png").unlink()
+            _, out, _, _ = self.batch("--room", "1")
+            self.assertIn("promoted attempt 2", out)
+        with self.subTest("skip rooms are written once"):
+            path = self.dst / "room_004.png"
+            with Image.open(path) as im:
+                self.assertEqual((im.size, im.getpixel((0, 0))), ((64, 800), (0, 0, 0)))
+            Image.new("RGB", (64, 800), "red").save(path)
+            self.batch("--room", "4")
+            with Image.open(path) as im:
+                self.assertEqual(im.getpixel((0, 0)), (255, 0, 0))
+            self.batch("--room", "4", "--force")
+            with Image.open(path) as im:
+                self.assertEqual(im.getpixel((0, 0)), (0, 0, 0))
 
     def test_uncaptioned_rooms_stop_the_batch(self):
         testkit.write_rooms(self.rooms_file, caption="")
@@ -468,34 +478,14 @@ class BatchTests(DriverFixture):
         self.assertEqual(code, 1)
         self.assertIn("ERROR rendering room_004: the room is one flat colour", err)
 
-    def test_skip_rooms_are_written_once(self):
-        path = self.dst / "room_004.png"
-        self.batch("--room", "4")
-        with Image.open(path) as im:
-            self.assertEqual((im.size, im.getpixel((0, 0))), ((64, 800), (0, 0, 0)))
-        Image.new("RGB", (64, 800), "red").save(path)
-        self.batch("--room", "4")
-        with Image.open(path) as im:
-            self.assertEqual(im.getpixel((0, 0)), (255, 0, 0))
-        self.batch("--room", "4", "--force")
-        with Image.open(path) as im:
-            self.assertEqual(im.getpixel((0, 0)), (0, 0, 0))
-
-    def test_a_deleted_output_is_rendered_again(self):
-        self.batch("--room", "1")
-        (self.dst / "room_001.png").unlink()
-        _, out, _, _ = self.batch("--room", "1")
-        self.assertIn("promoted attempt 2", out)
-
-    def test_workflow_and_strength_are_recorded(self):
-        self.batch("--room", "1", "--workflow", "qwen-image-2.1-i2i", "--match-strength", "0")
-        record = self.record(1)
-        self.assertEqual((record["workflow"], record["match"]["strength"]),
-                         ("qwen-image-2.1-i2i", 0.0))
-        with self.assertRaises(SystemExit):
-            self.batch("--match-strength", "1.5")
-
-    def test_a_bad_environment_default(self):
+    def test_workflow_and_match_strength(self):
+        with self.subTest("recorded, and a bad CLI value is refused"):
+            self.batch("--room", "1", "--workflow", "qwen-image-2.1-i2i", "--match-strength", "0")
+            record = self.record(1)
+            self.assertEqual((record["workflow"], record["match"]["strength"]),
+                             ("qwen-image-2.1-i2i", 0.0))
+            with self.assertRaises(SystemExit):
+                self.batch("--match-strength", "1.5")
         for name, value, message in (("ATL_WORKFLOW", "nope", "ATL_WORKFLOW='nope' is not a workflow"),
                                      ("ATL_MATCH_STRENGTH", "2", "ATL_MATCH_STRENGTH: 2 is not")):
             with self.subTest(name), patch.dict(os.environ, {name: value}):
@@ -517,25 +507,24 @@ class ReviewTests(DriverFixture):
             code, out, err = self.run_cli("review", *extra)
         return code, out, err, vlm
 
-    def test_reviews_every_promoted_room(self):
-        code, _, err, vlm = self.review()
-        self.assertEqual(code, 0, err)
-        reviews = load_reviews(self.reviews)
-        self.assertEqual(sorted(reviews), ["room_001", "room_002", "room_003"])
-        self.assertTrue(all(r.accepted and r.attempt == 1 and r.source == "review"
-                            for r in reviews.values()))
-        self.assertEqual([len(c.args[0]) for c in vlm.review.call_args_list], [1, 2, 4])
-        self.assertEqual(vlm.review.call_args_list[2].args[1].size, (4608, 576))
-        vlm.freed.assert_called_once()
-        self.assertTrue((self.dst / ".quality/room_001/attempt-1.review.json").is_file())
-
-    def test_skips_reviewed_rooms_unless_forced(self):
-        self.review()
-        _, out, _, vlm = self.review()
-        vlm.review.assert_not_called()
-        self.assertIn("skipped=4", out)
-        _, _, _, vlm = self.review("--force", "--room", "1")
-        self.assertEqual(vlm.review.call_count, 1)
+    def test_reviews_every_promoted_room_then_skips_unless_forced(self):
+        with self.subTest("reviews every promoted room"):
+            code, _, err, vlm = self.review()
+            self.assertEqual(code, 0, err)
+            reviews = load_reviews(self.reviews)
+            self.assertEqual(sorted(reviews), ["room_001", "room_002", "room_003"])
+            self.assertTrue(all(r.accepted and r.attempt == 1 and r.source == "review"
+                                for r in reviews.values()))
+            self.assertEqual([len(c.args[0]) for c in vlm.review.call_args_list], [1, 2, 4])
+            self.assertEqual(vlm.review.call_args_list[2].args[1].size, (4608, 576))
+            vlm.freed.assert_called_once()
+            self.assertTrue((self.dst / ".quality/room_001/attempt-1.review.json").is_file())
+        with self.subTest("skips reviewed rooms unless forced"):
+            _, out, _, vlm = self.review()
+            vlm.review.assert_not_called()
+            self.assertIn("skipped=4", out)
+            _, _, _, vlm = self.review("--force", "--room", "1")
+            self.assertEqual(vlm.review.call_count, 1)
 
     def test_a_rejection_sends_the_room_back_to_batch(self):
         def verdict(pairs, *a):
@@ -571,20 +560,20 @@ class ReviewTests(DriverFixture):
         self.assertIn("vLLM is not serving", err)
         vlm.review.assert_not_called()
 
-    def test_a_failed_review_is_recorded(self):
-        def boom(*a):
-            raise ValueError("VLM review verdict contradicts its issues")
-        code, _, _, _ = self.review("--room", "1", verdict=boom)
-        self.assertEqual(code, 1)
-        self.assertIn("contradicts", (self.dst / ".quality/room_001/attempt-1.review-error.txt")
-                      .read_text())
-
-    def test_a_down_comfyui_does_not_stop_the_review(self):
-        with testkit.vlm_stub(review=lambda *a: {"accepted": True, "issues": []},
-                              free=RuntimeError("connection refused")):
-            code, _, err = self.run_cli("review", "--room", "1")
-        self.assertEqual(code, 0)
-        self.assertIn("warning: failed to free ComfyUI's models: connection refused", err)
+    def test_review_failures_are_recorded_but_do_not_stop_it(self):
+        with self.subTest("a failed review is recorded"):
+            def boom(*a):
+                raise ValueError("VLM review verdict contradicts its issues")
+            code, _, _, _ = self.review("--room", "1", verdict=boom)
+            self.assertEqual(code, 1)
+            self.assertIn("contradicts",
+                          (self.dst / ".quality/room_001/attempt-1.review-error.txt").read_text())
+        with self.subTest("a down comfyui does not stop the review"):
+            with testkit.vlm_stub(review=lambda *a: {"accepted": True, "issues": []},
+                                  free=RuntimeError("connection refused")):
+                code, _, err = self.run_cli("review", "--room", "1")
+            self.assertEqual(code, 0)
+            self.assertIn("warning: failed to free ComfyUI's models: connection refused", err)
 
 
 @testkit.needs_real_corpus
