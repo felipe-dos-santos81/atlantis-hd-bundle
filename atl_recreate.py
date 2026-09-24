@@ -24,15 +24,20 @@ import argparse
 import json
 import os
 import re
+import shutil
 import sys
+import time
 from pathlib import Path
 
 from PIL import Image
 
+import colour_match
 import comfy_client
+import geometry_check
 import room_geometry
 import source_tree
-from prompts import caption_room, vlm_is_serving
+from prompts import (PAINTED_NEGATIVE, SEAM_NOTE, caption_room, render_prompt, vlm_is_serving,
+                     window_note)
 from rooms_file import RoomEntry, RoomsFileError, check_coverage, load_rooms, save_rooms
 from source_tree import SourceError
 
@@ -208,6 +213,108 @@ def cmd_caption(args):
         done += 1
     print(f"done: captioned={done} skipped={skipped} failed={failed} -> {args.rooms_file}")
     return 1 if failed else 0
+
+
+# ---- render one room --------------------------------------------------------
+
+def render_room(args, workflow, room, entry, corrections):
+    """Render one room window by window, stitch it, colour-match it, fix it up
+    and check its geometry; promote it into the output tree when that holds.
+
+    Returns (attempt, GeometryResult). Raises when a window fails to render or
+    comes back the wrong size: the windows rendered so far stay in the
+    attempt's tiles folder, and the attempt number stays used.
+    """
+    audit = audit_dir(args.dst, room)
+    audit.mkdir(parents=True, exist_ok=True)
+    attempt = latest_attempt(audit) + 1
+    tiles = audit / f"attempt-{attempt}.tiles"
+    tiles.mkdir()
+    seed = SEED + attempt - 1
+    started = time.monotonic()
+    indexed = source_tree.open_indexed(args.src, room)
+    guide = room_geometry.build_guide(indexed)
+    plan = room_geometry.plan_room(indexed)
+    canvas = guide.full.copy()
+    prompt_log = []
+
+    def render(label, guide_image, composite, mask, note):
+        positive = render_prompt(entry.caption, entry.kind, corrections, note, workflow.reference)
+        prompt_log.append(f"--- {label} ---\n{positive}")
+        paths = {}
+        for part, image in (("guide", guide_image), ("composite", composite), ("mask", mask)):
+            paths[part] = tiles / f"{label}.{part}.png"
+            image.save(paths[part])
+        saved = comfy_client.render_window(
+            workflow, guide=paths["guide"], composite=paths["composite"], mask=paths["mask"],
+            reference=REFERENCE, positive=positive, negative=PAINTED_NEGATIVE, seed=seed,
+            name=f"{room.key}_{label}", url=COMFY_URL, comfy_dir=COMFY_DIR)
+        out = tiles / f"{label}.png"
+        shutil.move(saved, out)
+        with Image.open(out) as im:
+            rendered = im.convert("RGB")
+        if rendered.size != guide_image.size:
+            raise RuntimeError(f"{label} came back {rendered.width}x{rendered.height}, "
+                               f"expected {guide_image.width}x{guide_image.height}")
+        return rendered
+
+    start, end = plan.span
+    previous = None
+    for k, window in enumerate(plan.windows, 1):
+        crop, composite, mask = room_geometry.window_inputs(guide.full, canvas, window, previous)
+        note = window_note(window.x0, window.x1, start, end) if len(plan.windows) > 1 else ""
+        rendered = render(f"window-{k}", crop, composite, mask, note)
+        room_geometry.paste_window(canvas, window, previous, rendered)
+        previous = window
+    if plan.wrap:
+        strip, composite, mask = room_geometry.seam_inputs(guide.full, canvas, plan)
+        room_geometry.apply_seam(canvas, plan, render("seam", strip, composite, mask, SEAM_NOTE))
+
+    write_atomic(audit / f"attempt-{attempt}.prompt.txt",
+                 f"workflow: {workflow.name}\n\n" + "\n\n".join(prompt_log)
+                 + f"\n\n--- negative ---\n{PAINTED_NEGATIVE}\n")
+    canvas.save(audit / f"attempt-{attempt}.png")
+    matched = colour_match.match(canvas, guide.full, args.match_strength)
+    final = room_geometry.apply_fixups(matched, plan, indexed)
+    if final.size != room.out_size:
+        raise RuntimeError(f"the stitched room is {final.width}x{final.height}, "
+                           f"expected {room.out_size[0]}x{room.out_size[1]}")
+    boundaries = room_geometry.stitch_boundaries(plan)
+    result = geometry_check.check(final, guide.native, [(w.x0, w.x1) for w in plan.windows],
+                                  boundaries, reference=guide.full)
+    for x, ratio in zip(boundaries, result.seam_ratios):
+        if ratio > geometry_check.SEAM_WARN:
+            print(f"  warning: {room.key} seam at 4x column {x}: step {ratio:.1f}x the local "
+                  "texture", flush=True)
+    sha = None
+    if result.passed:
+        dst = args.dst / room.out_name
+        save_image_atomic(final, dst)
+        sha = source_tree.file_sha256(dst)
+    m = plan.margins
+    record = {
+        "attempt": attempt, "workflow": workflow.name, "seed": seed, "reference": REFERENCE,
+        "dedither": room_geometry.DEDITHER_METHOD,
+        "window_width": room_geometry.WINDOW_WIDTH, "window_overlap": room_geometry.WINDOW_OVERLAP,
+        "windows": [[w.x0, w.x1] for w in plan.windows],
+        "wrap": [plan.wrap.period, plan.wrap.span] if plan.wrap else None,
+        "margins": {"left": m.left, "right": m.right, "top": m.top, "bottom": m.bottom},
+        "match": {"rule": colour_match.RULE, "strength": args.match_strength},
+        "geometry": result.as_dict(), "promoted": result.passed, "output_sha256": sha,
+        "seconds": round(time.monotonic() - started, 1),
+    }
+    write_atomic(audit / f"attempt-{attempt}.json", json.dumps(record, indent=2))
+    return attempt, result
+
+
+# ---- batch ------------------------------------------------------------------
+
+def memory_available_gb(meminfo=Path("/proc/meminfo")):
+    """MemAvailable in GiB. On this unified-memory host it is the GPU budget too."""
+    for line in meminfo.read_text().splitlines():
+        if line.startswith("MemAvailable:"):
+            return int(line.split()[1]) / 2 ** 20
+    raise RuntimeError(f"MemAvailable not found in {meminfo}")
 
 
 # ---- command line -----------------------------------------------------------

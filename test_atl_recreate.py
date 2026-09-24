@@ -167,5 +167,91 @@ class CaptionTests(DriverFixture):
         self.assertEqual((rooms["room_001"].caption, rooms["room_002"].caption), ("SCENE: ok", ""))
 
 
+class RenderRoomTests(DriverFixture):
+    def setUp(self):
+        super().setUp()
+        self.entries = load_rooms(self.rooms_file)
+        self.workflow = comfy_client.WORKFLOWS["qwen-edit-2511-canny"]
+
+    def render(self, number, transform=None, corrections=()):
+        room = self.room(number)
+        args = argparse.Namespace(src=self.src, dst=self.dst, match_strength=0.5)
+        with testkit.comfy_stub(comfy_dir=self.comfy_dir,
+                                render=testkit.fake_render(transform)) as stub:
+            result = a.render_room(args, self.workflow, room, self.entries[room.key],
+                                   list(corrections))
+        return result, stub
+
+    def test_a_one_window_room(self):
+        (attempt, result), stub = self.render(1)
+        self.assertEqual(attempt, 1)
+        self.assertTrue(result.passed, result.issues)
+        with Image.open(self.dst / "room_001.png") as im:
+            self.assertEqual((im.size, im.mode), ((1280, 576), "RGB"))
+        record = self.record(1)
+        self.assertEqual((record["promoted"], record["seed"], record["windows"], record["wrap"],
+                          record["workflow"], record["reference"]),
+                         (True, 42, [[0, 320]], None, "qwen-edit-2511-canny", "guide"))
+        self.assertEqual(record["output_sha256"], source_tree.file_sha256(self.dst / "room_001.png"))
+        audit = self.dst / ".quality" / "room_001"
+        self.assertTrue((audit / "attempt-1.png").is_file())
+        self.assertTrue((audit / "attempt-1.prompt.txt").read_text().startswith(
+            "workflow: qwen-edit-2511-canny\n"))
+        for name in ("window-1.guide.png", "window-1.composite.png", "window-1.mask.png",
+                     "window-1.png"):
+            self.assertTrue((audit / "attempt-1.tiles" / name).is_file(), name)
+        kw = stub.render.call_args.kwargs
+        self.assertEqual((kw["seed"], kw["reference"], kw["name"], kw["negative"]),
+                         (42, "guide", "room_001_window-1", PAINTED_NEGATIVE))
+        self.assertNotIn("one window of a wide scrolling room", kw["positive"])
+        self.assertEqual(list((self.comfy_dir / "output" / "atl").iterdir()), [])
+
+    def test_a_second_window_continues_the_first(self):
+        (_, result), stub = self.render(2)
+        self.assertTrue(result.passed, result.issues)
+        calls = [c.kwargs for c in stub.render.call_args_list]
+        self.assertEqual([c["name"] for c in calls], ["room_002_window-1", "room_002_window-2"])
+        self.assertIn("from 44% to 100%", calls[1]["positive"])
+        with Image.open(calls[1]["mask"]) as mask:
+            self.assertEqual((mask.getpixel((0, 0)), mask.getpixel((400, 0))), (0, 255))
+        self.assertEqual(len(self.record(2)["geometry"]["seam_ratios"]), 1)
+
+    def test_a_wraparound_room(self):
+        (_, result), stub = self.render(3)
+        self.assertTrue(result.passed, result.issues)
+        calls = [c.kwargs for c in stub.render.call_args_list]
+        self.assertEqual([c["name"] for c in calls],
+                         [f"room_003_window-{k}" for k in (1, 2, 3, 4)] + ["room_003_seam"])
+        self.assertIn(SEAM_NOTE, calls[-1]["positive"])
+        with Image.open(self.dst / "room_003.png") as im:
+            out = np.asarray(im.convert("RGB"))
+        self.assertTrue((out[:, 3360:4256] == out[:, :896]).all())
+        self.assertTrue((out[:, 4256:] == 0).all())
+        self.assertEqual(self.record(3)["wrap"], [840, 224])
+
+    def test_a_shifted_render_is_not_promoted(self):
+        (_, result), _ = self.render(1, transform=testkit.shift_right)
+        self.assertFalse(result.passed)
+        self.assertIn("the room is shifted", result.issues[0])
+        self.assertFalse((self.dst / "room_001.png").exists())
+        self.assertEqual((self.record(1)["promoted"], self.record(1)["output_sha256"]),
+                         (False, None))
+
+    def test_a_wrong_size_render_fails_the_room(self):
+        # Review Focus: ComfyUI hands back a size other than the window's.
+        def shrink(image):
+            return image.resize((image.width - 32, image.height))
+        with self.assertRaisesRegex(RuntimeError, "window-1 came back 1248x576, expected 1280x576"):
+            self.render(1, transform=shrink)
+        self.assertFalse((self.dst / "room_001.png").exists())
+        self.assertEqual(a.latest_attempt(self.dst / ".quality" / "room_001"), 1)
+
+    def test_attempts_continue_with_the_next_seed_and_carry_corrections(self):
+        self.render(1)
+        (attempt, _), stub = self.render(1, corrections=["the lamp moved"])
+        self.assertEqual((attempt, stub.render.call_args.kwargs["seed"]), (2, 43))
+        self.assertIn("the lamp moved", stub.render.call_args.kwargs["positive"])
+
+
 if __name__ == "__main__":
     unittest.main()

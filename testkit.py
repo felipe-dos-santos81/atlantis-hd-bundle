@@ -19,6 +19,7 @@ import numpy as np
 from PIL import Image
 
 import atl_recreate as a
+import comfy_client
 from rooms_file import RoomEntry, save_rooms
 
 
@@ -140,4 +141,58 @@ def vlm_stub(*, serving=True, caption=None, review=None, free=_UNSET):
         if free is not _UNSET:
             mocks.freed = stack.enter_context(
                 patch.object(comfy_client, "free_models", side_effect=free))
+        yield mocks
+
+
+def shift_right(image, pixels=8):
+    """`image` moved `pixels` to the right over black: a render that slid 2 native px."""
+    out = Image.new("RGB", image.size)
+    out.paste(image, (pixels, 0))
+    return out
+
+
+def fake_render(transform=None):
+    """A comfy_client.render_window stand-in that 'renders' a window by saving
+    its composite (through `transform`, when given) where ComfyUI would."""
+    def render(workflow, **kw):
+        with Image.open(kw["composite"]) as im:
+            image = im.convert("RGB")
+        if transform is not None:
+            image = transform(image)
+        folder = Path(kw["comfy_dir"]) / "output" / comfy_client.OUTPUT_PREFIX
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{kw['name']}_00001_.png"
+        image.save(path)
+        return path
+    return render
+
+
+@contextlib.contextmanager
+def comfy_stub(*, up=True, mem=100.0, missing=(), nodes=(), comfy_dir=None, render=None,
+               free=None, swept=0):
+    """Patch the ComfyUI side of `batch`: comfy_client.is_up, free_models,
+    missing_model_files, missing_nodes, sweep_outputs, atl_recreate's
+    memory_available_gb and (when given) COMFY_DIR and comfy_client.render_window
+    (`render`, a side_effect callable such as fake_render()).
+
+    Yields the mocks: is_up, freed, missing_model_files, missing_nodes, sweep,
+    memory_available_gb, and render when requested.
+    """
+    with contextlib.ExitStack() as stack:
+        mocks = SimpleNamespace(
+            is_up=stack.enter_context(patch.object(comfy_client, "is_up", return_value=up)),
+            freed=stack.enter_context(patch.object(comfy_client, "free_models", side_effect=free)),
+            missing_model_files=stack.enter_context(
+                patch.object(comfy_client, "missing_model_files", return_value=list(missing))),
+            missing_nodes=stack.enter_context(
+                patch.object(comfy_client, "missing_nodes", return_value=list(nodes))),
+            sweep=stack.enter_context(
+                patch.object(comfy_client, "sweep_outputs", return_value=swept)),
+            memory_available_gb=stack.enter_context(
+                patch.object(a, "memory_available_gb", return_value=mem)))
+        if comfy_dir is not None:
+            stack.enter_context(patch.object(a, "COMFY_DIR", comfy_dir))
+        if render is not None:
+            mocks.render = stack.enter_context(
+                patch.object(comfy_client, "render_window", side_effect=render))
         yield mocks
