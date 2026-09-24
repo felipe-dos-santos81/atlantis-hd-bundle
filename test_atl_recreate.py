@@ -11,6 +11,7 @@ from PIL import Image
 
 import atl_recreate as a
 import comfy_client
+import room_geometry
 import source_tree
 import testkit
 from prompts import PAINTED_NEGATIVE, SEAM_NOTE
@@ -487,6 +488,23 @@ class ReviewTests(DriverFixture):
                               free=RuntimeError("connection refused")):
             code, _, _ = self.run_cli("review", "--room", "1")
         self.assertEqual(code, 0)
+
+
+@testkit.needs_real_corpus
+class RealCorpusTests(unittest.TestCase):
+    def test_a_perfect_render_of_every_room_passes_the_gate(self):
+        # Regression: room 95's marginal edges failed its own guide (agreement 0.27), so no
+        # render of it could ever be promoted. Each room's guide, as the stitch, must pass.
+        rooms = testkit.real_rooms()
+        self.assertEqual(len(rooms), 91)
+        for room in rooms:
+            with self.subTest(room.key):
+                indexed = source_tree.open_indexed(testkit.REAL_SRC, room)
+                guide = room_geometry.build_guide(indexed)
+                plan = room_geometry.plan_room(indexed)
+                _, result, _ = a.finish_room(guide.full.copy(), guide, plan, indexed,
+                                             a.DEFAULT_MATCH_STRENGTH)
+                self.assertTrue(result.passed, result.issues)
 
 
 if __name__ == "__main__":

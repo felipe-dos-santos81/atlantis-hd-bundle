@@ -6,9 +6,14 @@ rooms or audit tree. Windows are native (x0, x1) column pairs; seam boundaries
 are 4x columns.
 
 Each measure has one job. Phase correlation finds a slid room or window (a
-2-pixel shift reads as 2.0). Edge agreement finds lost or moved structure: on
-the real art a 2-pixel shift still keeps most edges within 1 pixel, so it is
-no shift detector.
+2-pixel shift reads as 2.0). Edge agreement finds lost or moved structure,
+over the room and within each window: on the real art a 2-pixel shift still
+keeps most edges within 1 pixel, so it is no shift detector.
+
+Edge agreement has hysteresis. A source edge is strong above EDGE_THRESHOLD;
+it is kept when the render has an edge above RENDER_EDGE_THRESHOLD within
+1 pixel. Resampling to 4x and box-filtering back is not the identity, and it
+weakens marginal edges (room 95's sea) under a single shared threshold.
 """
 from dataclasses import dataclass
 
@@ -16,8 +21,10 @@ import numpy as np
 from PIL import Image
 
 MAX_SHIFT = 0.5             # native px, whole room and per window
-EDGE_THRESHOLD = 80.0       # Sobel magnitude on 0-255 luminance that counts as an edge
+EDGE_THRESHOLD = 80.0       # Sobel magnitude on 0-255 luminance of a strong source edge
+RENDER_EDGE_THRESHOLD = EDGE_THRESHOLD / 2  # a render edge that keeps a source edge
 MIN_EDGE_AGREEMENT = 0.80   # the least fraction of source edges the render keeps within 1 px
+MIN_WINDOW_EDGES = 100      # fewer strong source edge pixels than this: a window too sparse to judge
 SEAM_WARN = 3.0             # the step across a stitch boundary against the local column steps
 SEAM_BAND = 64              # 4x columns either side of a boundary that set the local step
 SEAM_CAP = 999.0            # a step where there is no local variation at all reads as this
@@ -28,6 +35,7 @@ class GeometryResult:
     shift: tuple            # (dx, dy) of the whole room, native px
     window_shifts: tuple    # ((dx, dy), ...) per window
     edge_agreement: float
+    window_agreements: tuple  # per window; 1.0 for a window too sparse to judge
     seam_ratios: tuple      # per stitch boundary; warnings only
     issues: tuple           # why the render fails; empty when it passes
 
@@ -39,6 +47,7 @@ class GeometryResult:
         return {"passed": self.passed, "shift": list(self.shift),
                 "window_shifts": [list(s) for s in self.window_shifts],
                 "edge_agreement": self.edge_agreement,
+                "window_agreements": list(self.window_agreements),
                 "seam_ratios": list(self.seam_ratios), "issues": list(self.issues)}
 
 
@@ -77,6 +86,11 @@ def phase_shift(a, b):
 
 
 def sobel(lum):
+    """The Sobel gradient magnitude of the 2-D array `lum`, at its own size.
+
+    Edge pixels are repeated at the border, so a flat array reads 0 everywhere;
+    a step of height d between two columns reads 4d on both sides of it.
+    """
     p = np.pad(lum, 1, mode="edge")
     gx = (p[:-2, 2:] + 2 * p[1:-1, 2:] + p[2:, 2:]) - (p[:-2, :-2] + 2 * p[1:-1, :-2] + p[2:, :-2])
     gy = (p[2:, :-2] + 2 * p[2:, 1:-1] + p[2:, 2:]) - (p[:-2, :-2] + 2 * p[:-2, 1:-1] + p[:-2, 2:])
@@ -93,14 +107,23 @@ def _grow(mask):
     return out
 
 
-def edge_agreement(source, render, threshold=EDGE_THRESHOLD):
-    """The fraction of the source's edge pixels with a render edge within 1 px;
-    1.0 when the source has no edges. Arrays are native-size luminance."""
-    edges = sobel(source) > threshold
-    if not edges.any():
-        return 1.0
-    kept = edges & _grow(sobel(render) > threshold)
-    return float(kept.sum() / edges.sum())
+def edge_maps(source, render):
+    """(strong, kept): the source's strong edge pixels, and those of them with a
+    render edge within 1 px. Arrays are native-size luminance."""
+    strong = sobel(source) > EDGE_THRESHOLD
+    return strong, strong & _grow(sobel(render) > RENDER_EDGE_THRESHOLD)
+
+
+def _fraction(strong, kept, min_edges=1):
+    """kept over strong; 1.0 when there are fewer than `min_edges` strong pixels."""
+    count = int(strong.sum())
+    return 1.0 if count < max(1, min_edges) else float(kept.sum() / count)
+
+
+def edge_agreement(source, render):
+    """The fraction of the source's strong edge pixels with a render edge within
+    1 px; 1.0 when the source has no edges. Arrays are native-size luminance."""
+    return _fraction(*edge_maps(source, render))
 
 
 def seam_ratio(image, x, band=SEAM_BAND):
@@ -137,14 +160,25 @@ def check(render, source, windows=(), boundaries=(), reference=None):
         window_shifts.append(ws)
         if max(abs(ws[0]), abs(ws[1])) >= MAX_SHIFT:
             issues.append(f"geometry: window {k} is shifted {ws[0]:+.1f},{ws[1]:+.1f} px")
-    agreement = round(edge_agreement(base, small), 4)
+    strong, kept = edge_maps(base, small)
+    agreement = round(_fraction(strong, kept), 4)
     if agreement < MIN_EDGE_AGREEMENT:
         issues.append(f"geometry: edge agreement {agreement:.2f}, needs "
                       f"{MIN_EDGE_AGREEMENT:.2f}")
+    # Each window is judged on the whole room's edge maps, masked to its
+    # columns, so a window's own borders add no Sobel artefacts.
+    window_agreements = []
+    for k, (x0, x1) in enumerate(windows, 1):
+        wa = round(_fraction(strong[:, x0:x1], kept[:, x0:x1], MIN_WINDOW_EDGES), 4)
+        window_agreements.append(wa)
+        if wa < MIN_EDGE_AGREEMENT:
+            issues.append(f"geometry: window {k} edge agreement {wa:.2f}, needs "
+                          f"{MIN_EDGE_AGREEMENT:.2f}")
     ratios = []
     for x in boundaries:
         ratio = seam_ratio(render, x)
         if reference is not None:
             ratio = round(ratio / max(1.0, seam_ratio(reference, x)), 3)
         ratios.append(ratio)
-    return GeometryResult(shift, tuple(window_shifts), agreement, tuple(ratios), tuple(issues))
+    return GeometryResult(shift, tuple(window_shifts), agreement, tuple(window_agreements),
+                          tuple(ratios), tuple(issues))

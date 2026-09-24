@@ -62,6 +62,17 @@ class EdgeAgreementTests(unittest.TestCase):
     def test_no_source_edges(self):
         self.assertEqual(gc.edge_agreement(np.zeros((8, 8)), np.ones((8, 8))), 1.0)
 
+    def test_a_render_edge_counts_down_to_the_render_threshold(self):
+        # Regression: resampling weakened room 95's marginal sea edges under the one shared
+        # threshold, so even its own guide failed. A step of d reads 4d on the Sobel.
+        source = np.zeros((16, 16))
+        source[:, 8:] = 30                                          # 120: a strong edge
+        for step, kept in ((15, 1.0), (5, 0.0)):                    # 60 is kept, 20 is not
+            with self.subTest(step=step):
+                render = np.zeros((16, 16))
+                render[:, 8:] = step
+                self.assertEqual(gc.edge_agreement(source, render), kept)
+
 
 class SeamRatioTests(unittest.TestCase):
     def test_a_hard_step_stands_out(self):
@@ -119,6 +130,34 @@ class CheckTests(unittest.TestCase):
         result = gc.check(up(source), source, windows=[(0, 64), (64, 128)])
         self.assertTrue(result.passed, result.issues)
         self.assertEqual(result.window_shifts[0], (0.0, 0.0))
+        self.assertEqual(result.window_agreements[0], 1.0)
+
+    def test_one_ruined_window_fails_the_room(self):
+        # Regression: spec 7, "every window passes"; a window painted to mush left the
+        # whole-room agreement above the bar.
+        source = blocks(512, 64, seed=5)
+        windows = [(x, x + 64) for x in range(0, 512, 64)]
+        render = up(source)
+        render.paste((128, 128, 128), (448 * 4, 0, 512 * 4, 256))
+        result = gc.check(render, source, windows=windows)
+        self.assertGreaterEqual(result.edge_agreement, gc.MIN_EDGE_AGREEMENT)
+        self.assertEqual(len(result.window_agreements), 8)
+        self.assertEqual(len(result.issues), 1, result.issues)
+        self.assertRegex(result.issues[0], r"^geometry: window 8 edge agreement 0\.\d\d, needs 0\.80$")
+        self.assertEqual(result.as_dict()["window_agreements"], list(result.window_agreements))
+
+    def test_a_window_too_sparse_to_judge_passes(self):
+        arr = np.asarray(self.source).copy()
+        arr[:, :72] = 0                            # window 1 is black ...
+        arr[8:16, 16:24] = 255                     # ... but for a square under MIN_WINDOW_EDGES
+        source = Image.fromarray(arr)
+        render = up(source)
+        render.paste((0, 0, 0), (0, 0, 256, 256))  # ... that the render loses
+        result = gc.check(render, source, windows=[(0, 64), (64, 128)])
+        self.assertLess(np.count_nonzero(gc.sobel(gc.luminance(source)[:, :64])
+                                         > gc.EDGE_THRESHOLD), gc.MIN_WINDOW_EDGES)
+        self.assertTrue(result.passed, result.issues)
+        self.assertEqual(result.window_agreements[0], 1.0)
 
 
 if __name__ == "__main__":

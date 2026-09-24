@@ -1,6 +1,4 @@
-import os
 import unittest
-from pathlib import Path
 
 import numpy as np
 from PIL import Image
@@ -8,10 +6,6 @@ from PIL import Image
 import room_geometry as rg
 import source_tree
 import testkit
-
-REAL_SRC = Path(os.environ.get("ATL_SRC")
-                or Path(__file__).resolve().parent.parent / "atlantis-textures" / "out")
-SKIP_ROOMS = (20, 68, 89, 90, 98)
 
 
 def checkerboard(a, b, size=(32, 32)):
@@ -166,16 +160,14 @@ class RoomPlanTests(unittest.TestCase):
                          [320, 976, 1664, 2368, 3040, 3360])
 
 
-@unittest.skipUnless((REAL_SRC / "manifest.json").is_file(),
-                     "the real atlantis-textures output is not present")
+@testkit.needs_real_corpus
 class RealCorpusTests(unittest.TestCase):
     """The measured facts the design rests on (spec section 4)."""
 
     @classmethod
     def setUpClass(cls):
-        source = source_tree.load(REAL_SRC)
-        cls.plans = {room.number: rg.plan_room(source_tree.open_indexed(REAL_SRC, room))
-                     for room in source.rooms if room.number not in SKIP_ROOMS}
+        cls.plans = {room.number: rg.plan_room(source_tree.open_indexed(testkit.REAL_SRC, room))
+                     for room in testkit.real_rooms()}
 
     def test_every_scene_and_insert_plans(self):
         self.assertEqual(len(self.plans), 91)

@@ -218,6 +218,21 @@ def cmd_caption(args):
 
 # ---- render one room --------------------------------------------------------
 
+def finish_room(canvas, guide, plan, indexed, strength):
+    """The stitched 4x `canvas` colour-matched toward the guide by `strength`,
+    fixed up, and checked against the de-dithered source:
+    (final image, GeometryResult, stitch boundaries)."""
+    matched = colour_match.match(canvas, guide.full, strength)
+    final = room_geometry.apply_fixups(matched, plan, indexed)
+    if final.size != guide.full.size:
+        raise RuntimeError(f"the stitched room is {final.width}x{final.height}, "
+                           f"expected {guide.full.width}x{guide.full.height}")
+    boundaries = room_geometry.stitch_boundaries(plan)
+    result = geometry_check.check(final, guide.native, [(w.x0, w.x1) for w in plan.windows],
+                                  boundaries, reference=guide.full)
+    return final, result, boundaries
+
+
 def render_room(args, workflow, room, entry, corrections):
     """Render one room window by window, stitch it, colour-match it, fix it up
     and check its geometry; promote it into the output tree when that holds.
@@ -275,14 +290,7 @@ def render_room(args, workflow, room, entry, corrections):
                  f"workflow: {workflow.name}\n\n" + "\n\n".join(prompt_log)
                  + f"\n\n--- negative ---\n{PAINTED_NEGATIVE}\n")
     canvas.save(audit / f"attempt-{attempt}.png")
-    matched = colour_match.match(canvas, guide.full, args.match_strength)
-    final = room_geometry.apply_fixups(matched, plan, indexed)
-    if final.size != room.out_size:
-        raise RuntimeError(f"the stitched room is {final.width}x{final.height}, "
-                           f"expected {room.out_size[0]}x{room.out_size[1]}")
-    boundaries = room_geometry.stitch_boundaries(plan)
-    result = geometry_check.check(final, guide.native, [(w.x0, w.x1) for w in plan.windows],
-                                  boundaries, reference=guide.full)
+    final, result, boundaries = finish_room(canvas, guide, plan, indexed, args.match_strength)
     for x, ratio in zip(boundaries, result.seam_ratios):
         if ratio > geometry_check.SEAM_WARN:
             print(f"  warning: {room.key} seam at 4x column {x}: step {ratio:.1f}x the local "

@@ -1,6 +1,6 @@
 """Shared test support: a miniature atlantis-textures output, a rooms.yaml
-writer, the ComfyUI and vLLM patch stacks, a fake window renderer and a
-CLI-capture helper.
+writer, the ComfyUI and vLLM patch stacks, a fake window renderer, a
+CLI-capture helper, and where the real corpus is.
 
 The real source tree is atlantis-textures' `out/`: indexed/rooms/room_NNN.png
 in P mode at native size, and manifest.json whose assets[] carry room, file,
@@ -11,6 +11,8 @@ import contextlib
 import hashlib
 import io
 import json
+import os
+import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -20,7 +22,22 @@ from PIL import Image
 
 import atl_recreate as a
 import comfy_client
+import source_tree
 from rooms_file import RoomEntry, save_rooms
+
+# The real corpus: atlantis-textures' output, and its flat placeholder rooms
+# (kind skip in the shipped rooms.yaml), which have nothing to plan or render.
+REAL_SRC = Path(os.environ.get("ATL_SRC")
+                or Path(__file__).resolve().parent.parent / "atlantis-textures" / "out")
+REAL_SKIP_ROOMS = (20, 68, 89, 90, 98)
+needs_real_corpus = unittest.skipUnless((REAL_SRC / "manifest.json").is_file(),
+                                        "the real atlantis-textures output is not present")
+
+
+def real_rooms():
+    """The real corpus's 91 scene and insert rooms (source_tree.Room)."""
+    return [room for room in source_tree.load(REAL_SRC).rooms
+            if room.number not in REAL_SKIP_ROOMS]
 
 
 # Indices 2-13 lie far apart (RGB distance over 64), so de-dithering keeps
