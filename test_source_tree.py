@@ -16,15 +16,13 @@ class SourceTreeTests(unittest.TestCase):
         self.tmp = Path(tmp.name)
         self.src = testkit.make_source(self.tmp)
 
-    def test_loads_background_rooms_by_number(self):
+    def test_loads_background_rooms_by_number_and_ignores_other_roles(self):
         source = source_tree.load(self.src)
         self.assertEqual([r.number for r in source.rooms], [1, 2, 3, 4])
         room = source.rooms[2]
         self.assertEqual((room.key, room.out_name), ("room_003", "room_003.png"))
         self.assertEqual(((room.width, room.height), room.out_size), ((1152, 144), (4608, 576)))
         self.assertEqual(room.rel, Path("indexed/rooms/room_003.png"))
-
-    def test_ignores_other_roles(self):
         testkit.rewrite_manifest(self.src, lambda assets: assets.append(
             {"room": 9, "role": "object", "file": "nope.png"}))
         self.assertEqual(len(source_tree.load(self.src).rooms), 4)
@@ -42,6 +40,7 @@ class SourceTreeTests(unittest.TestCase):
             "escaping path": (edit("file", "../x.png"), "relative path inside"),
             "room number": (edit("room", "1"), "non-negative integer"),
             "duplicate": (edit("room", 1, index=1), "duplicate room 1"),
+            "no rooms": (lambda assets: assets.clear(), "no background rooms"),
         }
         for name, (change, message) in cases.items():
             with self.subTest(name):
@@ -50,15 +49,15 @@ class SourceTreeTests(unittest.TestCase):
                 with self.assertRaisesRegex(SourceError, message):
                     source_tree.load(src)
 
-    def test_refuses_an_rgb_file(self):
-        Image.new("RGB", (320, 144)).save(self.src / "indexed/rooms/room_001.png")
-        with self.assertRaisesRegex(SourceError, "mode RGB, expected P"):
-            source_tree.load(self.src)
-
-    def test_refuses_an_unreadable_file(self):
-        (self.src / "indexed/rooms/room_001.png").write_bytes(b"not a png")
-        with self.assertRaisesRegex(SourceError, "not a readable image"):
-            source_tree.load(self.src)
+    def test_refuses_a_bad_image_file(self):
+        with self.subTest("wrong mode"):
+            Image.new("RGB", (320, 144)).save(self.src / "indexed/rooms/room_001.png")
+            with self.assertRaisesRegex(SourceError, "mode RGB, expected P"):
+                source_tree.load(self.src)
+        with self.subTest("unreadable"):
+            (self.src / "indexed/rooms/room_001.png").write_bytes(b"not a png")
+            with self.assertRaisesRegex(SourceError, "not a readable image"):
+                source_tree.load(self.src)
 
     def test_refuses_a_broken_or_missing_manifest(self):
         (self.src / "manifest.json").write_text("{")
@@ -66,11 +65,6 @@ class SourceTreeTests(unittest.TestCase):
             source_tree.load(self.src)
         (self.src / "manifest.json").unlink()
         with self.assertRaisesRegex(SourceError, "run make extract"):
-            source_tree.load(self.src)
-
-    def test_refuses_a_manifest_without_rooms(self):
-        testkit.rewrite_manifest(self.src, lambda assets: assets.clear())
-        with self.assertRaisesRegex(SourceError, "no background rooms"):
             source_tree.load(self.src)
 
     def test_select(self):
