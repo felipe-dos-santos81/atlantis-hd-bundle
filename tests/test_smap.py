@@ -88,3 +88,116 @@ def test_read_codec_ids_room1(archive_path):
     ids = read_codec_ids(a.data, smap.start, width=320)
     from collections import Counter
     assert Counter(ids) == Counter({0x1C: 28, 0x44: 12})
+
+
+def _index_bits(values):
+    return [b for v in values for b in [(v >> k) & 1 for k in range(8)]]
+
+
+def _multi_strip(strips, height):
+    header = 8 + 4 * len(strips)
+    bodies = [bytes([codec, first]) + _pack_bits(bits) for codec, first, bits in strips]
+    offsets = []
+    off = header
+    for body in bodies:
+        offsets.append(off)
+        off += len(body)
+    table = b"".join(o.to_bytes(4, "little") for o in offsets)
+    payload = table + b"".join(bodies)
+    return b"SMAP" + (8 + len(payload)).to_bytes(4, "big") + payload
+
+
+def test_method0_uncompressed_indices():
+    idx = [1, 2, 3, 4, 5, 6, 7]
+    data = _strip(0x01, 5, _index_bits(idx), height=1)
+    pixels, anomalies = decode_smap(data, 0, width=8, height=1)
+    assert list(pixels) == [5] + idx
+    assert anomalies == []
+
+
+def test_method1_delta_and_negate():
+    bits = [1, 1, 0, 1, 1, 1] + [0] * 5
+    data = _strip(0x1C, 10, bits, height=1)
+    pixels, anomalies = decode_smap(data, 0, width=8, height=1)
+    assert list(pixels) == [10, 9, 10, 10, 10, 10, 10, 10]
+    assert anomalies == []
+
+
+def test_method2_new_colour_and_deltas():
+    bits = [1, 0] + _index_bits([50])
+    bits += [1, 1, 0, 1, 1]
+    bits += [1, 1, 1, 0, 0]
+    bits += [0, 0, 0, 0]
+    data = _strip(0x44, 100, bits, height=1)
+    pixels, anomalies = decode_smap(data, 0, width=8, height=1)
+    assert list(pixels) == [100, 50, 52, 49, 49, 49, 49, 49]
+    assert anomalies == []
+
+
+def test_method2_rle_partial_run():
+    bits = [1, 1, 0, 0, 1] + _index_bits([3]) + [0, 0, 0, 0]
+    data = _strip(0x44, 7, bits, height=1)
+    pixels, anomalies = decode_smap(data, 0, width=8, height=1)
+    assert list(pixels) == [7] * 8
+    assert anomalies == []
+
+
+def test_eof_anomaly_truncated_strip():
+    data = _strip(0x1C, 12, [], height=2)
+    pixels, anomalies = decode_smap(data, 0, width=8, height=2)
+    assert anomalies == [Anomaly(0, 0, "eof")]
+    assert list(pixels) == [12] * 16
+
+
+def test_zero_run_anomaly():
+    bits = [1, 1, 0, 0, 1] + _index_bits([0]) + [0] * 8
+    data = _strip(0x44, 7, bits, height=1)
+    pixels, anomalies = decode_smap(data, 0, width=8, height=1)
+    assert anomalies == [Anomaly(0, 0, "zero-run")]
+    assert list(pixels) == [7] * 8
+
+
+def test_run_overshoot_anomaly():
+    bits = [1, 1, 0, 0, 1] + _index_bits([20])
+    data = _strip(0x44, 7, bits, height=1)
+    pixels, anomalies = decode_smap(data, 0, width=8, height=1)
+    assert anomalies == [Anomaly(0, 0, "run-overshoot")]
+    assert list(pixels) == [7] * 8
+
+
+def test_index_underflow_clamp():
+    bits = [1, 1, 1, 1, 0] + [0] * 6
+    data = _strip(0x44, 0, bits, height=1)
+    pixels, anomalies = decode_smap(data, 0, width=8, height=1)
+    assert anomalies == [Anomaly(0, 0, "index-underflow")]
+    assert list(pixels) == [0] * 8
+
+
+def test_index_overflow_clamp():
+    bits = [1, 1, 1, 0, 1] + [0] * 6
+    data = _strip(0x44, 255, bits, height=1)
+    pixels, anomalies = decode_smap(data, 0, width=8, height=1)
+    assert anomalies == [Anomaly(0, 0, "index-overflow")]
+    assert list(pixels) == [255] * 8
+
+
+def test_multiple_strips_crop_last_column():
+    data = _multi_strip([(0x1C, 1, [0] * 15), (0x1C, 2, [0] * 15)], height=2)
+    pixels, anomalies = decode_smap(data, 0, width=12, height=2)
+    assert len(pixels) == 24
+    assert anomalies == []
+    assert list(pixels) == [1] * 8 + [2] * 4 + [1] * 8 + [2] * 4
+
+
+def test_strip_offset_out_of_range_records_anomaly():
+    table = (9999).to_bytes(4, "little")
+    data = b"SMAP" + (8 + len(table)).to_bytes(4, "big") + table
+    pixels, anomalies = decode_smap(data, 0, width=8, height=1)
+    assert anomalies == [Anomaly(0, 0, "strip-out-of-range")]
+    assert list(pixels) == [0] * 8
+
+
+def test_read_codec_ids_out_of_range_returns_zero():
+    table = (9999).to_bytes(4, "little")
+    data = b"SMAP" + (8 + len(table)).to_bytes(4, "big") + table
+    assert read_codec_ids(data, 0, width=8) == [0]

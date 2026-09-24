@@ -77,8 +77,10 @@ class BitReader:
 
 def read_codec_ids(data: bytes, smap_off: int, width: int) -> list[int]:
     n = (width + 7) // 8
+    if smap_off < 0 or smap_off + 8 + 4 * n > len(data):
+        return [0] * n
     offsets = struct.unpack_from("<" + "I" * n, data, smap_off + 8)
-    return [data[smap_off + o] for o in offsets]
+    return [data[smap_off + o] if smap_off + o < len(data) else 0 for o in offsets]
 
 
 def _clamp_index(color: int, anomalies, strip_index, codec_id) -> int:
@@ -161,11 +163,17 @@ def _decode_strip(data, base, height, st, anomalies, strip_index) -> bytearray:
 
 def decode_smap(data: bytes, smap_off: int, width: int, height: int):
     n_strips = (width + 7) // 8
-    offsets = struct.unpack_from("<" + "I" * n_strips, data, smap_off + 8)
     pixels = bytearray(width * height)
     anomalies: list[Anomaly] = []
+    if smap_off < 0 or smap_off + 8 + 4 * n_strips > len(data):
+        anomalies.append(Anomaly(0, 0, "strip-out-of-range"))
+        return pixels, anomalies
+    offsets = struct.unpack_from("<" + "I" * n_strips, data, smap_off + 8)
     for s in range(n_strips):
         base = smap_off + offsets[s]
+        if base + 2 > len(data):
+            anomalies.append(Anomaly(s, 0, "strip-out-of-range"))
+            continue
         codec_id = data[base]
         st = settings(codec_id)
         if st is None:
