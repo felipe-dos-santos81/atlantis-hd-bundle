@@ -17,18 +17,19 @@ class MatchTests(unittest.TestCase):
     def test_strength_zero_keeps_the_raw_pixels(self):
         self.assertEqual(cm.match(self.render, self.guide, 0).tobytes(), self.render.tobytes())
 
-    def test_full_strength_takes_the_guide_statistics(self):
-        (gm, gs), (om, os_) = cm.lab_stats(self.guide), cm.lab_stats(
-            cm.match(self.render, self.guide, 1.0))
+    def test_strength_interpolates_the_guide_statistics(self):
+        raw_mean = cm.lab_stats(self.render)[0][0]
+        guide_mean, guide_std = cm.lab_stats(self.guide)
+        half = cm.lab_stats(cm.match(self.render, self.guide, 0.5))[0][0]
+        self.assertAlmostEqual(half, (raw_mean + guide_mean[0]) / 2, delta=1.5,
+                               msg="half strength lands between")
+        om, os_ = cm.lab_stats(cm.match(self.render, self.guide, 1.0))
         for band in range(3):
             with self.subTest(band=band):
-                self.assertAlmostEqual(om[band], gm[band], delta=1.5)
-                self.assertAlmostEqual(os_[band], gs[band], delta=2.0)
-
-    def test_half_strength_lands_between(self):
-        raw, guide = cm.lab_stats(self.render)[0][0], cm.lab_stats(self.guide)[0][0]
-        half = cm.lab_stats(cm.match(self.render, self.guide, 0.5))[0][0]
-        self.assertAlmostEqual(half, (raw + guide) / 2, delta=1.5)
+                self.assertAlmostEqual(om[band], guide_mean[band], delta=1.5,
+                                       msg="full strength takes the guide statistics")
+                self.assertAlmostEqual(os_[band], guide_std[band], delta=2.0,
+                                       msg="full strength takes the guide statistics")
 
     def test_matching_statistics_leave_saturated_colours_alone(self):
         # Regression: Pillow's 8-bit Lab round trip moved (0, 250, 210) to (38, 250, 209).
