@@ -48,6 +48,11 @@ LETTERING:
 
 SEAM_NOTE = '''This image straddles the join of a wraparound panorama: its left half is the room's right end and its right half is the room's left end. Paint one continuous scene across the middle, with no seam.'''
 
+# The one correction after a geometry rejection: the gate's issue strings mean
+# nothing to the diffusion model, and it likes to paint text it is given.
+GEOMETRY_CORRECTION = ("Keep every edge, object, horizon and outline exactly where the reference "
+                       "image has it; do not shift, crop, rescale or redraw the layout.")
+
 PAINTED_NEGATIVE = ("photograph, photorealistic, 3D render, CGI, pixel art, dithering, jpeg "
                     "artifacts, blurry, noisy, people, characters, figures, extra objects, "
                     "changed text, extra text, watermark, signature, frame, border")

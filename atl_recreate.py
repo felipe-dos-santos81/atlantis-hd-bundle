@@ -36,8 +36,8 @@ import comfy_client
 import geometry_check
 import room_geometry
 import source_tree
-from prompts import (PAINTED_NEGATIVE, SEAM_NOTE, caption_room, render_prompt, review_room,
-                     vlm_is_serving, window_note)
+from prompts import (GEOMETRY_CORRECTION, PAINTED_NEGATIVE, SEAM_NOTE, caption_room,
+                     render_prompt, review_room, vlm_is_serving, window_note)
 from rooms_file import (Review, RoomEntry, RoomsFileError, check_coverage, load_reviews,
                         load_rooms, save_reviews, save_rooms)
 from source_tree import SourceError
@@ -60,7 +60,7 @@ VLM_MODEL = os.environ.get("VLM_MODEL", "Qwen/Qwen3.8-27B")
 VLM_API_KEY = os.environ.get("VLM_API_KEY", "")
 MEMORY_FLOOR_GB = 45
 SEED = 42                   # attempt N of a room uses SEED + N - 1 for every window
-MAX_ATTEMPTS = 4            # a room rejected this many times waits for the user
+MAX_ATTEMPTS = 4            # a room with this many judged attempts, the latest rejected, waits
 DEFAULT_MATCH_STRENGTH = 0.5
 REFERENCE = "guide"         # what a window's encoder sees: "guide" or "composite"
 SCALE = source_tree.SCALE
@@ -124,6 +124,14 @@ def read_record(audit, attempt):
     except (OSError, ValueError):
         return None
     return value if isinstance(value, dict) else None
+
+
+def current_review(reviews, room, latest):
+    """reviews.yaml's verdict on the room, or None when there is none or it is
+    stale: an attempt later than the audit folder's latest, left behind when
+    the folder was cleared."""
+    review = reviews.get(room.key)
+    return None if review is None or review.attempt > latest else review
 
 
 def promoted_record(audit, sha):
@@ -349,25 +357,54 @@ def comfy_preflight(workflow, no_memory_check):
 def room_status(args, room, reviews):
     """(status, latest attempt) of a scene or insert room:
     new       never attempted
+    stuck     its latest judged attempt was rejected, and it has MAX_ATTEMPTS or
+              more judged attempts
     failed    the latest attempt never finished (it has no record)
     rejected  the latest attempt failed the geometry gate, or its review rejected it
     missing   promoted and not rejected, but the output file is gone
     done      promoted and not rejected (reviewed, or waiting for review)
+
+    A judged attempt is one with a record (attempt-N.json). A failed attempt
+    has none and never counts toward STUCK: a room failing on infrastructure is
+    retried on every batch. A stale review (see current_review) is ignored.
     """
     audit = audit_dir(args.dst, room)
     attempt = latest_attempt(audit)
     if attempt == 0:
         return "new", 0
-    record = read_record(audit, attempt)
-    if record is None:
+    review = current_review(reviews, room, attempt)
+    records = {n: r for n in range(1, attempt + 1) if (r := read_record(audit, n)) is not None}
+
+    def rejected(n):
+        return not records[n].get("promoted") or (review is not None and not review.accepted
+                                                  and review.attempt >= n)
+
+    if records and rejected(max(records)) and len(records) >= MAX_ATTEMPTS:
+        return "stuck", attempt
+    if attempt not in records:
         return "failed", attempt
-    review = reviews.get(room.key)
-    if not record.get("promoted") or (review is not None and not review.accepted
-                                      and review.attempt >= attempt):
+    if rejected(attempt):
         return "rejected", attempt
     if not (args.dst / room.out_name).is_file():
         return "missing", attempt
     return "done", attempt
+
+
+def corrections_for(args, room, reviews):
+    """What the room's next attempt must correct: the issues of its current
+    review when that review rejected an attempt and no later attempt was
+    promoted, whatever became of the attempts since (rejected or failed).
+    After a geometry rejection it is the one GEOMETRY_CORRECTION sentence:
+    the gate's own strings mean nothing to the diffusion model."""
+    audit = audit_dir(args.dst, room)
+    latest = latest_attempt(audit)
+    review = current_review(reviews, room, latest)
+    if review is None or review.accepted:
+        return []
+    if any((read_record(audit, n) or {}).get("promoted")
+           for n in range(review.attempt + 1, latest + 1)):
+        return []
+    return [GEOMETRY_CORRECTION] if review.source == "geometry" else list(review.issues)
 
 
 def write_nearest(args, room):
@@ -414,19 +451,17 @@ def cmd_batch(args):
             else:
                 done += 1
             continue
-        status, attempt = room_status(args, room, reviews)
+        status, _ = room_status(args, room, reviews)
         if not args.force and status == "done":
             done += 1
             continue
-        if not args.force and status == "rejected" and attempt >= MAX_ATTEMPTS:
+        if not args.force and status == "stuck":
             stuck.append(room)
             continue
         if not entry.caption.strip():
             uncaptioned.append(room.key)
             continue
-        review = reviews.get(room.key)
-        rejected = status == "rejected" and review is not None and not review.accepted
-        work.append((room, entry, list(review.issues) if rejected else []))
+        work.append((room, entry, corrections_for(args, room, reviews)))
 
     print(f"workflow: {workflow.name}  match strength: {args.match_strength}")
     print(f"{len(rooms)} room(s): render {len(work)}, copy {len(copies)} (kind skip), "
@@ -482,7 +517,7 @@ def cmd_batch(args):
             reviews[room.key] = Review(attempt, False, result.issues, "geometry")
             save_reviews(args.reviews, reviews)
             print(f"  rejected attempt {attempt}: " + "; ".join(result.issues), flush=True)
-            if attempt >= MAX_ATTEMPTS:
+            if room_status(args, room, reviews)[0] == "stuck":
                 stuck.append(room)
         for room in stuck:
             print(stuck_line(room), file=sys.stderr)
@@ -529,7 +564,7 @@ def cmd_review(args):
         attempt = latest_attempt(audit)
         record = read_record(audit, attempt) if attempt else None
         dst = args.dst / room.out_name
-        review = reviews.get(room.key)
+        review = current_review(reviews, room, attempt)
         # Only a promoted latest attempt is judged: a geometry rejection already
         # has its verdict, and a failed attempt has nothing to show.
         if (entry.kind == "skip" or record is None or not record.get("promoted")

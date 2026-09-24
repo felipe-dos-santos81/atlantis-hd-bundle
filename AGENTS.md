@@ -38,10 +38,18 @@ Rules that must survive any change:
   images through `<name>.pending` and a rename.
 - **Resumable by construction.** Caption skips filled entries. Batch derives
   each room's status from its audit folder (`atl_recreate.room_status`):
-  `new`, `failed` (the latest attempt has no record), `rejected` (by geometry
-  or review), `missing`, or `done`. It renders every room that is not `done`
-  and not STUCK (rejected `MAX_ATTEMPTS` times), unless `--force`. A failed
-  attempt keeps its number and its tiles.
+  `new`, `stuck`, `failed` (the latest attempt has no record), `rejected` (by
+  geometry or review), `missing`, or `done`. It renders every room that is
+  not `done` and not `stuck`, unless `--force`. A room is `stuck` when its
+  latest judged attempt (one with a record) was rejected and it has
+  `MAX_ATTEMPTS` judged attempts; failed attempts never count, so a room that
+  keeps failing on infrastructure is retried on every batch (exit code 1). A
+  failed attempt keeps its number and its tiles. The next attempt's
+  corrections (`corrections_for`) are the current review's issues while no
+  later attempt was promoted, whatever the attempts since became; a
+  geometry rejection gives the one `prompts.GEOMETRY_CORRECTION` sentence
+  instead of the gate's strings. A review of an attempt later than the audit
+  folder's latest is stale (`current_review`) and ignored.
 - **Renders never depend on other rooms.** A room is consistent within itself
   through the window continuation, and with other rooms through each room's
   colour match toward its own source.
@@ -112,7 +120,8 @@ Render one room through any new or edited graph before trusting it.
 - The positive prompt (`render_prompt`) is `PAINTED_RULES` (with the
   workflow's reference phrase), then the insert rules (the caption's TEXT as
   LETTERING when present), then the window note for a multi-window room, then
-  REFERENCE OBSERVATIONS (the caption), then corrections. `PAINTED_NEGATIVE`
+  REFERENCE OBSERVATIONS (the caption), then corrections (the review's
+  issues, or `GEOMETRY_CORRECTION` after a geometry rejection). `PAINTED_NEGATIVE`
   goes to the negative encoder: 2511's node 10, and 2.1's node 9
   `negative_prompt` (ignored at cfg 1).
 - `REVIEW_QUESTION` sends (guide window, render window) pairs and the whole

@@ -14,7 +14,7 @@ import comfy_client
 import room_geometry
 import source_tree
 import testkit
-from prompts import PAINTED_NEGATIVE, SEAM_NOTE
+from prompts import GEOMETRY_CORRECTION, PAINTED_NEGATIVE, SEAM_NOTE
 from rooms_file import Review, RoomEntry, load_reviews, load_rooms, save_reviews
 
 
@@ -310,16 +310,21 @@ class BatchTests(DriverFixture):
         code, _, _, _ = self.batch("--room", "1", "--no-memory-check", mem=20.0)
         self.assertEqual(code, 0)
 
-    def test_a_geometry_rejection_is_retried_with_its_issues(self):
+    def test_a_geometry_rejection_is_retried_with_the_layout_correction(self):
+        # Regression: the gate's own strings ("geometry: edge agreement 0.71, needs 0.80")
+        # went into the diffusion prompt, where they mean nothing and invite lettering.
         code, out, _, _ = self.batch("--room", "1", render=testkit.fake_render(testkit.shift_right))
         self.assertEqual(code, 0)
         self.assertIn("rejected attempt 1: geometry: the room is shifted", out)
         review = load_reviews(self.reviews)["room_001"]
         self.assertEqual((review.attempt, review.accepted, review.source), (1, False, "geometry"))
+        self.assertIn("geometry: the room is shifted", review.issues[0])
         code, out, _, mocks = self.batch("--room", "1")
         self.assertEqual(code, 0)
         self.assertIn("promoted attempt 2", out)
-        self.assertIn("geometry: the room is shifted", mocks.render.call_args.kwargs["positive"])
+        positive = mocks.render.call_args.kwargs["positive"]
+        self.assertIn(GEOMETRY_CORRECTION, positive)
+        self.assertNotIn("geometry:", positive)
 
     def test_a_review_rejection_is_retried(self):
         self.batch()
@@ -340,6 +345,49 @@ class BatchTests(DriverFixture):
         code, out, _, _ = self.batch("--room", "1", "--force")
         self.assertEqual(code, 0)
         self.assertIn("promoted attempt 5", out)
+
+    def test_a_failed_attempt_keeps_the_review_corrections(self):
+        # Regression: a review rejected attempt 1, attempt 2 timed out, and attempt 3
+        # rendered without the corrections and was promoted.
+        self.batch("--room", "1")
+        save_reviews(self.reviews, {"room_001": Review(1, False, ("the lamp moved",))})
+
+        def timeout(workflow, **kw):
+            raise TimeoutError("no history for p1 within 1800s")
+        code, _, _, _ = self.batch("--room", "1", render=timeout)
+        self.assertEqual(code, 1)
+        code, out, _, mocks = self.batch("--room", "1")
+        self.assertEqual(code, 0)
+        self.assertIn("promoted attempt 3", out)
+        self.assertIn("the lamp moved", mocks.render.call_args.kwargs["positive"])
+        _, _, _, mocks = self.batch("--room", "1", "--force")
+        self.assertNotIn("the lamp moved", mocks.render.call_args.kwargs["positive"])
+
+    def test_failed_attempts_do_not_count_toward_stuck(self):
+        # Regression: three ComfyUI failures and one geometry rejection made the room
+        # STUCK as "rejected 4 times".
+        def boom(workflow, **kw):
+            raise RuntimeError("ComfyUI execution failed: boom")
+        for _ in range(a.MAX_ATTEMPTS - 1):
+            self.assertEqual(self.batch("--room", "1", render=boom)[0], 1)
+        code, _, err, _ = self.batch("--room", "1", render=testkit.fake_render(testkit.shift_right))
+        self.assertEqual(code, 0)
+        self.assertNotIn("STUCK", err)
+        code, out, err, _ = self.batch("--room", "1")
+        self.assertEqual(code, 0, err)
+        self.assertIn(f"promoted attempt {a.MAX_ATTEMPTS + 1}", out)
+
+    def test_a_stale_review_is_ignored(self):
+        # Regression: after the audit folder is cleared, a reviews.yaml entry for a later
+        # attempt made every new attempt read as rejected and carry its corrections.
+        save_reviews(self.reviews, {"room_001": Review(3, False, ("the lamp moved",))})
+        code, out, _, mocks = self.batch("--room", "1")
+        self.assertEqual(code, 0)
+        self.assertIn("promoted attempt 1", out)
+        self.assertNotIn("the lamp moved", mocks.render.call_args.kwargs["positive"])
+        _, out, _, mocks = self.batch("--room", "1")
+        mocks.render.assert_not_called()
+        self.assertIn("done 1", out)
 
     def test_a_failed_room_does_not_stop_the_others(self):
         good = testkit.fake_render()
@@ -468,6 +516,14 @@ class ReviewTests(DriverFixture):
         _, _, _, vlm = self.review("--room", "1")
         vlm.review.assert_not_called()
         self.assertEqual(load_reviews(self.reviews)["room_001"].source, "geometry")
+
+    def test_a_stale_review_does_not_count_as_reviewed(self):
+        # Regression: a reviews.yaml entry for a later attempt, left after the audit
+        # folder was cleared, read as a verdict on the new attempt.
+        save_reviews(self.reviews, {"room_001": Review(3, True, ())})
+        _, _, _, vlm = self.review("--room", "1")
+        self.assertEqual(vlm.review.call_count, 1)
+        self.assertEqual(load_reviews(self.reviews)["room_001"].attempt, 1)
 
     def test_refuses_without_vllm(self):
         code, _, err, vlm = self.review(serving=False)

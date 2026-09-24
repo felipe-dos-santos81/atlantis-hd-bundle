@@ -108,8 +108,21 @@ Before a render is promoted, `make batch` checks it:
 - **Seams:** a window boundary whose colour step is 3 times the local texture
   (measured relative to the source's own step there) is printed as a warning.
 
-A room rejected 4 times is **STUCK**: batch reports it and leaves it alone.
-Fix its caption, then run `make batch room=N force=1`.
+A rejected room's next attempts carry the rejection's issues as corrections
+until one of them is promoted, even when an attempt in between failed. After
+a geometry rejection the correction is one fixed sentence asking the model to
+keep the reference layout; the gate's own issue strings stay in
+`reviews.yaml` and `attempt-N.json`.
+
+A room is **STUCK** when its latest judged attempt (one with an
+`attempt-N.json`) was rejected and it has 4 judged attempts: batch reports it
+and leaves it alone. Fix its caption, then run `make batch room=N force=1`. A
+failed attempt (a ComfyUI error, a timeout, Ctrl-C) has no record and never
+counts: batch retries that room on every run and exits 1.
+
+To restart a room from scratch, delete `data/rooms-ai/.quality/room_NNN/`,
+then run `make batch room=N force=1`. A `reviews.yaml` entry for an attempt
+later than the audit folder's latest is stale and ignored.
 
 ## Outputs and the audit folder
 
