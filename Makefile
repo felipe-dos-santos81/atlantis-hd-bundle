@@ -13,9 +13,10 @@ force ?=
 memcheck ?= 1
 strength ?=
 workflow ?=
+FORCE_ARG = $(if $(force),--force)
 ARGS = $(foreach r,$(room),--room $(r)) $(if $(src),--src "$(src)") $(if $(dst),--dst "$(dst)")
 BATCH_ARGS = $(if $(filter 0,$(memcheck)),--no-memory-check) $(if $(strength),--match-strength $(strength)) \
-             $(if $(workflow),--workflow $(workflow)) $(if $(force),--force)
+             $(if $(workflow),--workflow $(workflow)) $(FORCE_ARG)
 
 .PHONY: help install server caption dry-run batch review verify check test clean
 
@@ -40,19 +41,19 @@ clean: ## Remove __pycache__ (never touches data/)
 
 # ── Pipeline ─────────────────────────────────────────────────────────────────
 
-caption: install ## [STEP 1] Caption scene and insert rooms with vLLM into rooms.yaml (room=, force=1)
-	./run_batch.sh caption $(ARGS) $(if $(force),--force)
+caption: install ## [STEP 1] Caption scene/insert rooms with vLLM into rooms.yaml (room=, force=1)
+	./run_batch.sh caption $(ARGS) $(FORCE_ARG)
 
-dry-run: install ## [STEP 2a] Show what batch would render, without touching ComfyUI (room=, workflow=, strength=, force=1)
+dry-run: install ## [STEP 2a] Preview batch's plan, without touching ComfyUI (room=, workflow=, strength=, force=1)
 	./run_batch.sh batch --dry-run $(ARGS) $(BATCH_ARGS)
 
-batch: install ## [STEP 2] Render rooms through ComfyUI into data/rooms-ai; stop vLLM first (room=, workflow=, strength=, memcheck=0, force=1)
+batch: install ## [STEP 2] Render via ComfyUI into data/rooms-ai; stop vLLM first (room=, workflow=, strength=, memcheck=0, force=1)
 	./run_batch.sh batch $(ARGS) $(BATCH_ARGS)
 
 review: install ## [STEP 3] Review promoted rooms with vLLM into reviews.yaml (room=, force=1)
-	./run_batch.sh review $(ARGS) $(if $(force),--force)
+	./run_batch.sh review $(ARGS) $(FORCE_ARG)
 
-verify: install ## [STEP 4] Audit data/rooms-ai against the manifest, the 4x rule and the attempt records (room=)
+verify: install ## [STEP 4] Audit data/rooms-ai against the manifest, the 4x rule and the attempts (room=)
 	./run_batch.sh verify $(ARGS)
 
 # ── Development ──────────────────────────────────────────────────────────────
