@@ -1,0 +1,288 @@
+room_001:
+  kind: scene
+  caption: ''
+room_002:
+  kind: scene
+  caption: ''
+room_003:
+  kind: scene
+  caption: ''
+room_004:
+  kind: scene
+  caption: ''
+room_005:
+  kind: scene
+  caption: ''
+room_006:
+  kind: scene
+  caption: ''
+room_007:
+  kind: scene
+  caption: ''
+room_008:
+  kind: insert
+  caption: ''
+room_009:
+  kind: insert
+  caption: ''
+room_010:
+  kind: scene
+  caption: ''
+room_011:
+  kind: scene
+  caption: ''
+room_012:
+  kind: scene
+  caption: ''
+room_013:
+  kind: scene
+  caption: ''
+room_014:
+  kind: scene
+  caption: ''
+room_015:
+  kind: scene
+  caption: ''
+room_016:
+  kind: scene
+  caption: ''
+room_017:
+  kind: scene
+  caption: ''
+room_018:
+  kind: scene
+  caption: ''
+room_019:
+  kind: scene
+  caption: ''
+room_020:
+  kind: skip
+  caption: ''
+room_021:
+  kind: scene
+  caption: ''
+room_022:
+  kind: scene
+  caption: ''
+room_023:
+  kind: scene
+  caption: ''
+room_024:
+  kind: scene
+  caption: ''
+room_025:
+  kind: scene
+  caption: ''
+room_026:
+  kind: scene
+  caption: ''
+room_027:
+  kind: scene
+  caption: ''
+room_028:
+  kind: scene
+  caption: ''
+room_029:
+  kind: scene
+  caption: ''
+room_030:
+  kind: scene
+  caption: ''
+room_031:
+  kind: scene
+  caption: ''
+room_032:
+  kind: scene
+  caption: ''
+room_033:
+  kind: scene
+  caption: ''
+room_035:
+  kind: scene
+  caption: ''
+room_036:
+  kind: scene
+  caption: ''
+room_037:
+  kind: scene
+  caption: ''
+room_039:
+  kind: scene
+  caption: ''
+room_040:
+  kind: scene
+  caption: ''
+room_041:
+  kind: scene
+  caption: ''
+room_042:
+  kind: scene
+  caption: ''
+room_043:
+  kind: scene
+  caption: ''
+room_044:
+  kind: scene
+  caption: ''
+room_045:
+  kind: scene
+  caption: ''
+room_046:
+  kind: scene
+  caption: ''
+room_047:
+  kind: insert
+  caption: ''
+room_048:
+  kind: scene
+  caption: ''
+room_049:
+  kind: scene
+  caption: ''
+room_050:
+  kind: scene
+  caption: ''
+room_051:
+  kind: scene
+  caption: ''
+room_052:
+  kind: scene
+  caption: ''
+room_053:
+  kind: scene
+  caption: ''
+room_054:
+  kind: scene
+  caption: ''
+room_055:
+  kind: scene
+  caption: ''
+room_056:
+  kind: scene
+  caption: ''
+room_057:
+  kind: scene
+  caption: ''
+room_058:
+  kind: scene
+  caption: ''
+room_059:
+  kind: scene
+  caption: ''
+room_060:
+  kind: scene
+  caption: ''
+room_061:
+  kind: scene
+  caption: ''
+room_062:
+  kind: scene
+  caption: ''
+room_063:
+  kind: scene
+  caption: ''
+room_064:
+  kind: scene
+  caption: ''
+room_065:
+  kind: scene
+  caption: ''
+room_066:
+  kind: scene
+  caption: ''
+room_067:
+  kind: scene
+  caption: ''
+room_068:
+  kind: skip
+  caption: ''
+room_069:
+  kind: scene
+  caption: ''
+room_070:
+  kind: insert
+  caption: ''
+room_071:
+  kind: scene
+  caption: ''
+room_072:
+  kind: scene
+  caption: ''
+room_073:
+  kind: scene
+  caption: ''
+room_074:
+  kind: scene
+  caption: ''
+room_075:
+  kind: insert
+  caption: ''
+room_076:
+  kind: scene
+  caption: ''
+room_077:
+  kind: scene
+  caption: ''
+room_078:
+  kind: scene
+  caption: ''
+room_079:
+  kind: scene
+  caption: ''
+room_080:
+  kind: scene
+  caption: ''
+room_081:
+  kind: scene
+  caption: ''
+room_082:
+  kind: scene
+  caption: ''
+room_083:
+  kind: insert
+  caption: ''
+room_084:
+  kind: insert
+  caption: ''
+room_085:
+  kind: insert
+  caption: ''
+room_086:
+  kind: insert
+  caption: ''
+room_087:
+  kind: insert
+  caption: ''
+room_088:
+  kind: insert
+  caption: ''
+room_089:
+  kind: skip
+  caption: ''
+room_090:
+  kind: skip
+  caption: ''
+room_091:
+  kind: scene
+  caption: ''
+room_092:
+  kind: scene
+  caption: ''
+room_093:
+  kind: scene
+  caption: ''
+room_094:
+  kind: scene
+  caption: ''
+room_095:
+  kind: scene
+  caption: ''
+room_096:
+  kind: scene
+  caption: ''
+room_097:
+  kind: scene
+  caption: ''
+room_098:
+  kind: skip
+  caption: ''
