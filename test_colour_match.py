@@ -22,13 +22,23 @@ class MatchTests(unittest.TestCase):
             cm.match(self.render, self.guide, 1.0))
         for band in range(3):
             with self.subTest(band=band):
-                self.assertAlmostEqual(om[band], gm[band], delta=2.5)
-                self.assertAlmostEqual(os_[band], gs[band], delta=3.5)
+                self.assertAlmostEqual(om[band], gm[band], delta=1.5)
+                self.assertAlmostEqual(os_[band], gs[band], delta=2.0)
 
     def test_half_strength_lands_between(self):
         raw, guide = cm.lab_stats(self.render)[0][0], cm.lab_stats(self.guide)[0][0]
         half = cm.lab_stats(cm.match(self.render, self.guide, 0.5))[0][0]
-        self.assertAlmostEqual(half, (raw + guide) / 2, delta=4)
+        self.assertAlmostEqual(half, (raw + guide) / 2, delta=1.5)
+
+    def test_matching_statistics_leave_saturated_colours_alone(self):
+        # Regression: Pillow's 8-bit Lab round trip moved (0, 250, 210) to (38, 250, 209).
+        rng = np.random.default_rng(3)
+        colours = np.array([(0, 250, 210), (255, 0, 0), (0, 0, 255), (250, 0, 250),
+                            (0, 255, 0), (255, 220, 0), (10, 10, 10), (240, 240, 240)], np.uint8)
+        render = colours[rng.integers(0, len(colours), (48, 64))]
+        guide = Image.fromarray(render[::-1, ::-1].copy())     # the same pixels, so the same statistics
+        out = np.asarray(cm.match(Image.fromarray(render), guide, 1.0), dtype=int)
+        self.assertLessEqual(np.abs(out - render.astype(int)).max(), 1)
 
     def test_a_flat_render(self):
         out = cm.match(Image.new("RGB", (32, 16), (90, 90, 90)), self.guide, 1.0)
