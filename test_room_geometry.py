@@ -31,14 +31,22 @@ def spans(windows):
 
 
 class GuideTests(unittest.TestCase):
-    def test_to_rgb_uses_the_exact_palette(self):
-        index = int(testkit.room_pixels(testkit.DEFAULT_ROOMS[0])[0, 0])
-        self.assertEqual(rg.to_rgb(fixture_room(1)).getpixel((0, 0)), testkit.PALETTE[index])
+    def test_to_rgb_and_build_guide(self):
+        with self.subTest("to_rgb uses the exact palette"):
+            index = int(testkit.room_pixels(testkit.DEFAULT_ROOMS[0])[0, 0])
+            self.assertEqual(rg.to_rgb(fixture_room(1)).getpixel((0, 0)), testkit.PALETTE[index])
+        with self.subTest("build_guide sizes"):
+            guide = rg.build_guide(fixture_room(2))
+            self.assertEqual((guide.native.size, guide.full.size), ((568, 144), (2272, 576)))
+            self.assertEqual((guide.native.mode, guide.full.mode), ("RGB", "RGB"))
 
-    def test_palette_smooth_melts_near_dithering(self):
+    def test_dedither_softens_the_checkerboard(self):
         board = checkerboard((100, 100, 100), (130, 130, 130))
-        out = np.asarray(rg.dedither(board, "palette-smooth"), dtype=float)
-        self.assertLess(out.std(), 0.2 * np.asarray(board, dtype=float).std())
+        board_std = np.asarray(board, dtype=float).std()
+        for method, factor in (("palette-smooth", 0.2), ("gaussian", 0.5)):
+            with self.subTest(method=method):
+                out = np.asarray(rg.dedither(board, method), dtype=float)
+                self.assertLess(out.std(), factor * board_std)
 
     def test_palette_smooth_keeps_edges_between_far_colours(self):
         arr = np.zeros((8, 16, 3), np.uint8)
@@ -46,31 +54,24 @@ class GuideTests(unittest.TestCase):
         image = Image.fromarray(arr)
         self.assertEqual(rg.dedither(image, "palette-smooth").tobytes(), image.tobytes())
 
-    def test_gaussian_softens_dithering(self):
-        board = checkerboard((100, 100, 100), (130, 130, 130))
-        out = np.asarray(rg.dedither(board, "gaussian"), dtype=float)
-        self.assertLess(out.std(), 0.5 * np.asarray(board, dtype=float).std())
-
     def test_unknown_method(self):
         with self.assertRaisesRegex(ValueError, "unknown de-dither method 'median'"):
             rg.dedither(checkerboard((0, 0, 0), (1, 1, 1)), "median")
 
-    def test_build_guide_sizes(self):
-        guide = rg.build_guide(fixture_room(2))
-        self.assertEqual((guide.native.size, guide.full.size), ((568, 144), (2272, 576)))
-        self.assertEqual((guide.native.mode, guide.full.mode), ("RGB", "RGB"))
-
 
 class MarginTests(unittest.TestCase):
-    def test_right_margin_of_the_wraparound_fixture(self):
-        pixels = testkit.room_pixels(testkit.DEFAULT_ROOMS[2])
-        self.assertEqual(rg.blank_margins(pixels), rg.Margins(0, 88, 0, 0))
-
-    def test_margins_on_every_side(self):
-        pixels = np.zeros((10, 20), np.uint8)       # a black frame ...
-        pixels[3:8, 2:16] = 5                       # ... around content of index 5 ...
-        pixels[4:6, 6:10] = 7                       # ... with some detail
-        self.assertEqual(rg.blank_margins(pixels), rg.Margins(2, 4, 3, 2))
+    def test_blank_margins(self):
+        every_side = np.zeros((10, 20), np.uint8)   # a black frame ...
+        every_side[3:8, 2:16] = 5                   # ... around content of index 5 ...
+        every_side[4:6, 6:10] = 7                   # ... with some detail
+        cases = {
+            "right margin of the wraparound fixture": (
+                testkit.room_pixels(testkit.DEFAULT_ROOMS[2]), rg.Margins(0, 88, 0, 0)),
+            "margins on every side": (every_side, rg.Margins(2, 4, 3, 2)),
+        }
+        for name, (pixels, expected) in cases.items():
+            with self.subTest(name):
+                self.assertEqual(rg.blank_margins(pixels), expected)
 
     def test_a_run_needs_one_index_throughout(self):
         pixels = np.full((4, 8), 3, np.uint8)
@@ -80,28 +81,25 @@ class MarginTests(unittest.TestCase):
 
 
 class WrapTests(unittest.TestCase):
-    def setUp(self):
-        self.pixels = testkit.room_pixels(testkit.DEFAULT_ROOMS[2])   # wrap (840, 224), 88 margin
-        self.end = 1152 - 88
-
-    def test_finds_the_repeat(self):
-        self.assertEqual(rg.find_wrap(self.pixels, self.end), rg.Wrap(840, 224))
-
-    def test_tolerates_a_few_differences(self):
-        self.pixels[:4, 900:904] = 1                # 16 of 32256 pixels: a 99.95% match
-        self.assertEqual(rg.find_wrap(self.pixels, self.end), rg.Wrap(840, 224))
-
-    def test_needs_nearly_every_pixel(self):
-        self.pixels[:13, 900:905] = 1               # 65 of 32256 pixels: a 99.8% match
-        self.assertIsNone(rg.find_wrap(self.pixels, self.end))
-
-    def test_no_repeat(self):
-        pixels = testkit.room_pixels(testkit.room(9, 1152, 144, right_margin=88))
-        self.assertIsNone(rg.find_wrap(pixels, self.end))
-
-    def test_ignores_a_repeat_closer_than_one_screen(self):
-        pixels = testkit.room_pixels(testkit.room(9, 400, 144, wrap=(200, 200)))
-        self.assertIsNone(rg.find_wrap(pixels, 400))
+    def test_find_wrap(self):
+        end = 1152 - 88                                                 # wrap (840, 224), 88 margin
+        exact = testkit.room_pixels(testkit.DEFAULT_ROOMS[2])
+        few_diffs = exact.copy()
+        few_diffs[:4, 900:904] = 1                  # 16 of 32256 pixels: a 99.95% match
+        many_diffs = exact.copy()
+        many_diffs[:13, 900:905] = 1                # 65 of 32256 pixels: a 99.8% match
+        cases = {
+            "finds the repeat": (exact, end, rg.Wrap(840, 224)),
+            "tolerates a few differences": (few_diffs, end, rg.Wrap(840, 224)),
+            "needs nearly every pixel": (many_diffs, end, None),
+            "no repeat": (testkit.room_pixels(testkit.room(9, 1152, 144, right_margin=88)),
+                         end, None),
+            "ignores a repeat closer than one screen": (
+                testkit.room_pixels(testkit.room(9, 400, 144, wrap=(200, 200))), 400, None),
+        }
+        for name, (pixels, plan_end, expected) in cases.items():
+            with self.subTest(name):
+                self.assertEqual(rg.find_wrap(pixels, plan_end), expected)
 
 
 class WindowPlanTests(unittest.TestCase):
@@ -135,12 +133,15 @@ class RoomPlanTests(unittest.TestCase):
     def test_fixture_rooms(self):
         one = rg.plan_room(fixture_room(1))
         self.assertEqual((spans(one.windows), one.wrap, one.span), ([(0, 320)], None, (0, 320)))
+        self.assertEqual(rg.stitch_boundaries(one), [])
         two = rg.plan_room(fixture_room(2))
         self.assertEqual(spans(two.windows), [(0, 320), (248, 568)])
+        self.assertEqual(rg.stitch_boundaries(two), [1136])
         wrap = rg.plan_room(fixture_room(3))
         self.assertEqual((wrap.wrap, wrap.span, wrap.margins),
                          (rg.Wrap(840, 224), (0, 840), rg.Margins(0, 88, 0, 0)))
         self.assertEqual(len(wrap.windows), 4)
+        self.assertEqual(rg.stitch_boundaries(wrap), [320, 976, 1664, 2368, 3040, 3360])
 
     def test_margins_round_the_span_out_to_8_columns(self):
         pixels = testkit.room_pixels(testkit.room(9, 320, 200))
@@ -152,12 +153,6 @@ class RoomPlanTests(unittest.TestCase):
     def test_a_flat_room_has_nothing_to_render(self):
         with self.assertRaisesRegex(ValueError, "set kind: skip"):
             rg.plan_room(fixture_room(4))
-
-    def test_stitch_boundaries(self):
-        self.assertEqual(rg.stitch_boundaries(rg.plan_room(fixture_room(1))), [])
-        self.assertEqual(rg.stitch_boundaries(rg.plan_room(fixture_room(2))), [1136])
-        self.assertEqual(rg.stitch_boundaries(rg.plan_room(fixture_room(3))),
-                         [320, 976, 1664, 2368, 3040, 3360])
 
 
 @testkit.needs_real_corpus
@@ -192,24 +187,25 @@ class WindowInputTests(unittest.TestCase):
         self.guide = noise((2272, 576), seed=1)
         self.canvas = noise((2272, 576), seed=2)
 
-    def test_a_first_window_is_painted_whole(self):
-        crop, composite, mask = rg.window_inputs(self.guide, self.canvas, self.plan.windows[0], None)
-        self.assertEqual(crop.size, (1280, 576))
-        self.assertEqual(composite.tobytes(), crop.tobytes())
-        self.assertEqual((mask.mode, set(np.asarray(mask).ravel())), ("L", {255}))
-
-    def test_a_later_window_holds_the_outer_half_of_its_overlap(self):
-        first, second = self.plan.windows
-        crop, composite, mask = rg.window_inputs(self.guide, self.canvas, second, first)
-        m = np.asarray(mask)
-        self.assertTrue((m[:, :144] == 0).all())                # 36 native columns held
-        ramp = m[0, 144:288]
-        self.assertTrue(((ramp > 0) & (ramp < 255)).all())
-        self.assertTrue((np.diff(ramp.astype(int)) >= 0).all())
-        self.assertTrue((m[:, 288:] == 255).all())
-        c = np.asarray(composite)
-        self.assertTrue((c[:, :288] == np.asarray(self.canvas)[:, 992:1280]).all())
-        self.assertTrue((c[:, 288:] == np.asarray(crop)[:, 288:]).all())
+    def test_window_inputs(self):
+        with self.subTest("a first window is painted whole"):
+            crop, composite, mask = rg.window_inputs(self.guide, self.canvas,
+                                                      self.plan.windows[0], None)
+            self.assertEqual(crop.size, (1280, 576))
+            self.assertEqual(composite.tobytes(), crop.tobytes())
+            self.assertEqual((mask.mode, set(np.asarray(mask).ravel())), ("L", {255}))
+        with self.subTest("a later window holds the outer half of its overlap"):
+            first, second = self.plan.windows
+            crop, composite, mask = rg.window_inputs(self.guide, self.canvas, second, first)
+            m = np.asarray(mask)
+            self.assertTrue((m[:, :144] == 0).all())                # 36 native columns held
+            ramp = m[0, 144:288]
+            self.assertTrue(((ramp > 0) & (ramp < 255)).all())
+            self.assertTrue((np.diff(ramp.astype(int)) >= 0).all())
+            self.assertTrue((m[:, 288:] == 255).all())
+            c = np.asarray(composite)
+            self.assertTrue((c[:, :288] == np.asarray(self.canvas)[:, 992:1280]).all())
+            self.assertTrue((c[:, 288:] == np.asarray(crop)[:, 288:]).all())
 
     def test_paste_window_starts_mid_overlap(self):
         first, second = self.plan.windows
@@ -250,19 +246,21 @@ class SeamTests(unittest.TestCase):
 
 
 class FixupTests(unittest.TestCase):
-    def test_wrap_copy_and_margin(self):
-        indexed = fixture_room(3)
-        out = np.asarray(rg.apply_fixups(noise((4608, 576), seed=7), rg.plan_room(indexed), indexed))
-        self.assertTrue((out[:, 3360:4256] == out[:, :896]).all())
-        self.assertTrue((out[:, 4256:] == 0).all())
-
-    def test_top_and_bottom_margins(self):
-        pixels = testkit.room_pixels(testkit.room(9, 320, 144))
-        pixels[:28], pixels[-26:] = 0, 0            # room 58's letterbox rows
-        indexed = testkit.indexed_image(pixels)
-        out = np.asarray(rg.apply_fixups(noise((1280, 576), seed=8), rg.plan_room(indexed), indexed))
-        self.assertTrue((out[:112] == 0).all() and (out[-104:] == 0).all())
-        self.assertFalse((out[112:-104] == 0).all())
+    def test_apply_fixups_blanks_margins_and_copies_the_wrap(self):
+        with self.subTest("wrap copy and right margin"):
+            indexed = fixture_room(3)
+            out = np.asarray(rg.apply_fixups(noise((4608, 576), seed=7), rg.plan_room(indexed),
+                                             indexed))
+            self.assertTrue((out[:, 3360:4256] == out[:, :896]).all())
+            self.assertTrue((out[:, 4256:] == 0).all())
+        with self.subTest("top and bottom margins"):
+            pixels = testkit.room_pixels(testkit.room(9, 320, 144))
+            pixels[:28], pixels[-26:] = 0, 0            # room 58's letterbox rows
+            indexed = testkit.indexed_image(pixels)
+            out = np.asarray(rg.apply_fixups(noise((1280, 576), seed=8), rg.plan_room(indexed),
+                                             indexed))
+            self.assertTrue((out[:112] == 0).all() and (out[-104:] == 0).all())
+            self.assertFalse((out[112:-104] == 0).all())
 
     def test_nothing_to_fix(self):
         indexed = fixture_room(1)
