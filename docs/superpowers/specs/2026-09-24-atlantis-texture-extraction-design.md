@@ -275,7 +275,7 @@ exists and documents what does not.
 
 ## 13. Project setup
 
-- Project root: `~/Documents/atlantis-textures/` (new, `git init`).
+- Project root: `~/code/mine/atlantis-textures/` (new, `git init`).
 - Game files are read in place from the `.app`; never copied or committed.
 - The `.app` is code-signed and is never modified.
 
