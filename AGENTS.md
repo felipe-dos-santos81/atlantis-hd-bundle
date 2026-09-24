@@ -90,7 +90,7 @@ Per room (`atl_recreate.render_room`):
 6. `geometry_check.check`: shift per room and per window; edge agreement per
    room and per window (the room's edge maps masked to the window's columns),
    with hysteresis: a source edge is strong above `EDGE_THRESHOLD` (80) and
-   kept by a render edge above `RENDER_EDGE_THRESHOLD` (`EDGE_THRESHOLD / 2`)
+   kept by a render edge above `RENDER_EDGE_THRESHOLD` (60)
    within 1 px; a window with fewer than `MIN_WINDOW_EDGES` (100) strong
    source edge pixels reads 1.0; seam ratios relative to the guide's.
    Promote on a pass; a rejection goes to `reviews.yaml` as `source: geometry`.
@@ -196,6 +196,9 @@ strength) with their evidence.
 - Include room 95 in the spike. It is the corpus's weakest-edge room: a
   320x200 all-texture sea whose 122 strong source edge pixels nearly all sit
   just over `EDGE_THRESHOLD` (98% between 80 and 110). Its own guide agreed
-  0.27 before `RENDER_EDGE_THRESHOLD`, 0.64 with a render threshold of 75 and
-  0.96 at 70; the spike's calibration of `RENDER_EDGE_THRESHOLD` and
-  `MIN_EDGE_AGREEMENT` must keep a good render of it promotable.
+  0.27 before `RENDER_EDGE_THRESHOLD`, 0.64 with a render threshold of 75,
+  0.96 at 70 and 1.0 at 60. A good render of it must stay promotable.
+- The spike calibrates `RENDER_EDGE_THRESHOLD` alongside `MIN_EDGE_AGREEMENT`.
+  Lower is more tolerant of resampling and less of a gate: one window blurred
+  with radius 8 at 4x was caught in 20 of the 33 multi-window rooms at 60,
+  but in 3 at 40.

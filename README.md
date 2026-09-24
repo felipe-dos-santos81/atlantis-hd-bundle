@@ -107,7 +107,7 @@ within one level) and checks it:
   each window), and must keep at least 80% of the source's strong edges
   within 1 px, over the room and within each window. A source edge is strong
   at a Sobel magnitude of 80 (`EDGE_THRESHOLD`); a render edge keeps it from
-  40 (`RENDER_EDGE_THRESHOLD`), since the 4x round trip weakens marginal
+  60 (`RENDER_EDGE_THRESHOLD`), since the 4x round trip weakens marginal
   edges. A window with fewer than 100 strong source edge pixels
   (`MIN_WINDOW_EDGES`) is too sparse to judge and reads 1.0. A failure is
   written to `reviews.yaml` as `source: geometry`, and the next batch retries

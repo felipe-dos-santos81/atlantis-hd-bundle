@@ -67,7 +67,7 @@ class EdgeAgreementTests(unittest.TestCase):
         # threshold, so even its own guide failed. A step of d reads 4d on the Sobel.
         source = np.zeros((16, 16))
         source[:, 8:] = 30                                          # 120: a strong edge
-        for step, kept in ((15, 1.0), (5, 0.0)):                    # 60 is kept, 20 is not
+        for step, kept in ((17, 1.0), (14, 0.0)):                   # 68 is kept, 56 is not
             with self.subTest(step=step):
                 render = np.zeros((16, 16))
                 render[:, 8:] = step

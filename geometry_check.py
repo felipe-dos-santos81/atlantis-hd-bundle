@@ -22,7 +22,9 @@ from PIL import Image
 
 MAX_SHIFT = 0.5             # native px, whole room and per window
 EDGE_THRESHOLD = 80.0       # Sobel magnitude on 0-255 luminance of a strong source edge
-RENDER_EDGE_THRESHOLD = EDGE_THRESHOLD / 2  # a render edge that keeps a source edge
+# A render edge above this keeps a source edge. Room 95's own guide agrees 0.27 at 80 and
+# 0.96 at 70; 60 keeps every real room's own guide at 1.0 without blinding the gate.
+RENDER_EDGE_THRESHOLD = 60.0
 MIN_EDGE_AGREEMENT = 0.80   # the least fraction of source edges the render keeps within 1 px
 MIN_WINDOW_EDGES = 100      # a window with fewer strong source edge pixels is too sparse to judge
 SEAM_WARN = 3.0             # the step across a stitch boundary against the local column steps
