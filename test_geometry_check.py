@@ -143,7 +143,8 @@ class CheckTests(unittest.TestCase):
         self.assertGreaterEqual(result.edge_agreement, gc.MIN_EDGE_AGREEMENT)
         self.assertEqual(len(result.window_agreements), 8)
         self.assertEqual(len(result.issues), 1, result.issues)
-        self.assertRegex(result.issues[0], r"^geometry: window 8 edge agreement 0\.\d\d, needs 0\.80$")
+        self.assertRegex(result.issues[0],
+                         r"^geometry: window 8 edge agreement 0\.\d\d, needs 0\.80$")
         self.assertEqual(result.as_dict()["window_agreements"], list(result.window_agreements))
 
     def test_a_window_too_sparse_to_judge_passes(self):

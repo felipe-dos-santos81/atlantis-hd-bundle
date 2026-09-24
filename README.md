@@ -133,6 +133,7 @@ data/rooms-ai/.quality/room_NNN/
   attempt-N.tiles/                    window-K.{guide,composite,mask}.png, window-K.png, seam.*
   attempt-N.prompt.txt                starts "workflow: NAME"; every window's prompt
   attempt-N.json                      seed, windows, wrap, margins, match, geometry, promoted, sha256, seconds
+  attempt-N.error.txt                 a failed attempt: workflow, seed, window, seconds, error (no .json)
   attempt-N.review.json               the VLM verdict
 ```
 

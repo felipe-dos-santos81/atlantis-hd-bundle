@@ -211,7 +211,8 @@ class RenderRoomTests(DriverFixture):
         (_, result), stub = self.render(2)
         self.assertTrue(result.passed, result.issues)
         calls = [c.kwargs for c in stub.render.call_args_list]
-        self.assertEqual([c["name"] for c in calls], ["room_002_a1-window-1", "room_002_a1-window-2"])
+        self.assertEqual([c["name"] for c in calls],
+                         ["room_002_a1-window-1", "room_002_a1-window-2"])
         self.assertIn("from 44% to 100%", calls[1]["positive"])
         with Image.open(calls[1]["mask"]) as mask:
             self.assertEqual((mask.getpixel((0, 0)), mask.getpixel((400, 0))), (0, 255))
@@ -246,6 +247,28 @@ class RenderRoomTests(DriverFixture):
             self.render(1, transform=shrink)
         self.assertFalse((self.dst / "room_001.png").exists())
         self.assertEqual(a.latest_attempt(self.dst / ".quality" / "room_001"), 1)
+
+    def test_a_failed_attempt_records_its_error(self):
+        # Regression: a failed attempt left no audit of what went wrong.
+        good = testkit.fake_render()
+
+        def render(workflow, **kw):
+            if kw["name"].endswith("window-2"):
+                raise TimeoutError("no history for p1 within 1800s")
+            return good(workflow, **kw)
+        room = self.room(2)
+        args = argparse.Namespace(src=self.src, dst=self.dst, match_strength=0.5)
+        with testkit.comfy_stub(comfy_dir=self.comfy_dir, render=render):
+            with self.assertRaises(TimeoutError):
+                a.render_room(args, self.workflow, room, self.entries[room.key], [])
+        audit = self.dst / ".quality" / "room_002"
+        text = (audit / "attempt-1.error.txt").read_text()
+        for line in ("workflow: qwen-edit-2511-canny", "seed: 42", "window: window-2",
+                     "error: TimeoutError: no history for p1 within 1800s"):
+            self.assertIn(line + "\n", text)
+        self.assertRegex(text, r"seconds: \d+\.\d\n")
+        self.assertFalse((audit / "attempt-1.json").exists())
+        self.assertEqual(a.room_status(args, room, {}), ("failed", 1))
 
     def test_attempts_continue_with_the_next_seed_and_carry_corrections(self):
         self.render(1)

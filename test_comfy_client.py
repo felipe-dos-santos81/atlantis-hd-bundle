@@ -110,7 +110,8 @@ class RenderWindowTests(unittest.TestCase):
 
     def test_fills_the_2511_graph(self):
         path, http = self.render("qwen-edit-2511-canny")
-        self.assertEqual(path, self.comfy_dir / "output" / "atl" / "room_001_a1-window-1_00001_.png")
+        self.assertEqual(path,
+                         self.comfy_dir / "output" / "atl" / "room_001_a1-window-1_00001_.png")
         prompt = http.calls[0][1]["prompt"]
         for node, part in (("1", "guide"), ("2", "composite"), ("3", "mask")):
             staged = f"__atl_room_001_a1-window-1_{part}.png"

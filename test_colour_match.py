@@ -36,7 +36,7 @@ class MatchTests(unittest.TestCase):
         colours = np.array([(0, 250, 210), (255, 0, 0), (0, 0, 255), (250, 0, 250),
                             (0, 255, 0), (255, 220, 0), (10, 10, 10), (240, 240, 240)], np.uint8)
         render = colours[rng.integers(0, len(colours), (48, 64))]
-        guide = Image.fromarray(render[::-1, ::-1].copy())     # the same pixels, so the same statistics
+        guide = Image.fromarray(render[::-1, ::-1].copy())     # the same pixels and statistics
         out = np.asarray(cm.match(Image.fromarray(render), guide, 1.0), dtype=int)
         self.assertLessEqual(np.abs(out - render.astype(int)).max(), 1)
 
