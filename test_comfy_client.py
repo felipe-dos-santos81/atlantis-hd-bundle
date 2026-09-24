@@ -37,6 +37,7 @@ class FakeComfy:
 
 class TemplateTests(unittest.TestCase):
     def test_each_record_matches_its_template(self):
+        self.assertIn(comfy_client.DEFAULT_WORKFLOW, comfy_client.WORKFLOWS)
         for name, wf in comfy_client.WORKFLOWS.items():
             with self.subTest(name):
                 prompt = comfy_client.load_template(wf)
@@ -84,9 +85,6 @@ class TemplateTests(unittest.TestCase):
         self.assertNotIn("image_1", inputs)
         self.assertEqual(wf.reference_inputs, (("9", "images.image_1"),))
 
-    def test_default_workflow_is_registered(self):
-        self.assertIn(comfy_client.DEFAULT_WORKFLOW, comfy_client.WORKFLOWS)
-
 
 class RenderWindowTests(unittest.TestCase):
     def setUp(self):
@@ -108,35 +106,40 @@ class RenderWindowTests(unittest.TestCase):
             timeout=timeout, sleep=sleep)
         return path, http
 
-    def test_fills_the_2511_graph(self):
-        path, http = self.render("qwen-edit-2511-canny")
-        self.assertEqual(path,
-                         self.comfy_dir / "output" / "atl" / "room_001_a1-window-1_00001_.png")
-        prompt = http.calls[0][1]["prompt"]
-        for node, part in (("1", "guide"), ("2", "composite"), ("3", "mask")):
-            staged = f"__atl_room_001_a1-window-1_{part}.png"
-            self.assertEqual(prompt[node]["inputs"]["image"], staged)
-            self.assertTrue((self.comfy_dir / "input" / staged).is_file())
-        self.assertEqual((prompt["9"]["inputs"]["prompt"], prompt["10"]["inputs"]["prompt"]),
-                         ("paint it", "no photo"))
-        self.assertEqual(prompt["13"]["inputs"]["seed"], 43)
-        self.assertEqual((prompt["9"]["inputs"]["image1"], prompt["10"]["inputs"]["image1"]),
-                         (["1", 0], ["1", 0]))
-        self.assertEqual(prompt["15"]["inputs"]["filename_prefix"], "atl/room_001_a1-window-1")
+    def test_render_window_fills_the_graph(self):
+        with self.subTest("2511 graph"):
+            path, http = self.render("qwen-edit-2511-canny")
+            self.assertEqual(path, self.comfy_dir / "output" / "atl"
+                             / "room_001_a1-window-1_00001_.png")
+            prompt = http.calls[0][1]["prompt"]
+            for node, part in (("1", "guide"), ("2", "composite"), ("3", "mask")):
+                staged = f"__atl_room_001_a1-window-1_{part}.png"
+                self.assertEqual(prompt[node]["inputs"]["image"], staged)
+                self.assertTrue((self.comfy_dir / "input" / staged).is_file())
+            self.assertEqual((prompt["9"]["inputs"]["prompt"], prompt["10"]["inputs"]["prompt"]),
+                             ("paint it", "no photo"))
+            self.assertEqual(prompt["13"]["inputs"]["seed"], 43)
+            self.assertEqual((prompt["9"]["inputs"]["image1"], prompt["10"]["inputs"]["image1"]),
+                             (["1", 0], ["1", 0]))
+            self.assertEqual(prompt["15"]["inputs"]["filename_prefix"], "atl/room_001_a1-window-1")
+        with self.subTest("the reference can be the composite"):
+            _, http = self.render("qwen-image-2.1-i2i", reference="composite")
+            inputs = http.calls[0][1]["prompt"]["9"]["inputs"]
+            self.assertEqual(inputs["images.image_1"], ["2", 0])
+            self.assertEqual((inputs["prompt"], inputs["negative_prompt"]),
+                             ("paint it", "no photo"))
 
-    def test_the_reference_can_be_the_composite(self):
-        _, http = self.render("qwen-image-2.1-i2i", reference="composite")
-        inputs = http.calls[0][1]["prompt"]["9"]["inputs"]
-        self.assertEqual(inputs["images.image_1"], ["2", 0])
-        self.assertEqual((inputs["prompt"], inputs["negative_prompt"]), ("paint it", "no photo"))
-
-    def test_an_unknown_reference(self):
-        with self.assertRaisesRegex(ValueError, "reference must be one of guide, composite"):
-            self.render("qwen-image-2.1-i2i", reference="both")
-
-    def test_a_failed_execution(self):
-        with self.assertRaisesRegex(RuntimeError, "ComfyUI execution failed"):
-            self.render("qwen-image-2.1-i2i", http=FakeComfy(self.comfy_dir, status="error"))
+    def test_render_window_errors(self):
+        cases = {
+            "an unknown reference": (dict(reference="both"), ValueError,
+                                     "reference must be one of guide, composite"),
+            "a failed execution": (dict(http=FakeComfy(self.comfy_dir, status="error")),
+                                   RuntimeError, "ComfyUI execution failed"),
+        }
+        for name, (kwargs, exc, message) in cases.items():
+            with self.subTest(name):
+                with self.assertRaisesRegex(exc, message):
+                    self.render("qwen-image-2.1-i2i", **kwargs)
 
     def test_a_timeout_interrupts_the_prompt(self):
         http = FakeComfy(self.comfy_dir, history=False)
@@ -156,63 +159,65 @@ class RenderWindowTests(unittest.TestCase):
 
 
 class PreflightTests(unittest.TestCase):
-    def test_missing_model_files(self):
+    def test_preflight_checks(self):
         wf = comfy_client.WORKFLOWS["qwen-image-2.1-i2i"]
-        with tempfile.TemporaryDirectory() as tmp:
-            missing = comfy_client.missing_model_files(wf, tmp)
-            self.assertEqual(missing, ["models/diffusion_models/qwen_image_2.1_bf16.safetensors",
-                                       "models/text_encoders/qwen3vl_8b_bf16.safetensors",
-                                       "models/vae/qwen_image_2.1_vae_bf16.safetensors"])
-            for rel in missing:
-                path = Path(tmp) / rel
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.touch()
-            self.assertEqual(comfy_client.missing_model_files(wf, tmp), [])
+        with self.subTest("missing model files"):
+            with tempfile.TemporaryDirectory() as tmp:
+                missing = comfy_client.missing_model_files(wf, tmp)
+                self.assertEqual(missing, ["models/diffusion_models/qwen_image_2.1_bf16.safetensors",
+                                           "models/text_encoders/qwen3vl_8b_bf16.safetensors",
+                                           "models/vae/qwen_image_2.1_vae_bf16.safetensors"])
+                for rel in missing:
+                    path = Path(tmp) / rel
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.touch()
+                self.assertEqual(comfy_client.missing_model_files(wf, tmp), [])
 
-    def test_missing_nodes(self):
-        wf = comfy_client.WORKFLOWS["qwen-image-2.1-i2i"]
-        known = {"TextEncodeQwenImage21", "DifferentialDiffusion", "SetLatentNoiseMask"}
+        with self.subTest("missing nodes"):
+            known = {"TextEncodeQwenImage21", "DifferentialDiffusion", "SetLatentNoiseMask"}
 
-        def http(url, timeout=60):
-            cls = url.rsplit("/", 1)[1]
-            if cls == "SetLatentNoiseMask":
-                raise RuntimeError("HTTP 500")
-            return {cls: {}} if cls in known else {}
-        self.assertEqual(comfy_client.missing_nodes(wf, "http://c", http),
-                         ["LoadImageMask", "SetLatentNoiseMask"])
+            def http(url, timeout=60):
+                cls = url.rsplit("/", 1)[1]
+                if cls == "SetLatentNoiseMask":
+                    raise RuntimeError("HTTP 500")
+                return {cls: {}} if cls in known else {}
+            self.assertEqual(comfy_client.missing_nodes(wf, "http://c", http),
+                             ["LoadImageMask", "SetLatentNoiseMask"])
 
-    def test_is_up_and_free(self):
-        calls = []
+        with self.subTest("is up and free"):
+            calls = []
 
-        def http(url, data=None, timeout=60):
-            calls.append((url, data))
-            return {}
-        self.assertTrue(comfy_client.is_up("http://c", http))
-        comfy_client.free_models("http://c", http)
-        self.assertEqual(calls[-1], ("http://c/free",
-                                     b'{"unload_models": true, "free_memory": true}'))
+            def http(url, data=None, timeout=60):
+                calls.append((url, data))
+                return {}
+            self.assertTrue(comfy_client.is_up("http://c", http))
+            comfy_client.free_models("http://c", http)
+            self.assertEqual(calls[-1], ("http://c/free",
+                                         b'{"unload_models": true, "free_memory": true}'))
 
-        def down(url, timeout=60):
-            raise OSError("refused")
-        self.assertFalse(comfy_client.is_up("http://c", down))
+            def down(url, timeout=60):
+                raise OSError("refused")
+            self.assertFalse(comfy_client.is_up("http://c", down))
 
 
 class SweepTests(unittest.TestCase):
-    def test_removes_only_the_rooms_own_renders(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            out = Path(tmp) / "output" / "atl"
-            out.mkdir(parents=True)
-            for name in ("room_001_a1-window-1_00001_.png", "room_001_a3-seam_00003_.png",
-                         "room_002_a1-window-1_00001_.png", "room_001_a1-window-1_00001_.png.txt"):
-                (out / name).touch()
-            self.assertEqual(comfy_client.sweep_outputs("room_001", tmp), 2)
-            self.assertEqual(sorted(p.name for p in out.iterdir()),
-                             ["room_001_a1-window-1_00001_.png.txt",
-                              "room_002_a1-window-1_00001_.png"])
+    def test_sweep_outputs(self):
+        with self.subTest("removes only the room's own renders"):
+            with tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp) / "output" / "atl"
+                out.mkdir(parents=True)
+                for name in ("room_001_a1-window-1_00001_.png", "room_001_a3-seam_00003_.png",
+                             "room_002_a1-window-1_00001_.png",
+                             "room_001_a1-window-1_00001_.png.txt"):
+                    (out / name).touch()
+                self.assertEqual(comfy_client.sweep_outputs("room_001", tmp), 2)
+                self.assertEqual(sorted(p.name for p in out.iterdir()),
+                                 ["room_001_a1-window-1_00001_.png.txt",
+                                  "room_002_a1-window-1_00001_.png"])
 
-    def test_no_output_folder(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            self.assertEqual(comfy_client.sweep_outputs("room_001", tmp), 0)
+        with self.subTest("no output folder"):
+            with tempfile.TemporaryDirectory() as tmp:
+                self.assertEqual(comfy_client.sweep_outputs("room_001", tmp), 0)
 
 
 if __name__ == "__main__":
