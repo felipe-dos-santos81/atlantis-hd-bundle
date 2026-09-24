@@ -15,24 +15,24 @@ class RoomsTests(unittest.TestCase):
         self.dir = Path(tmp.name)
         self.path = self.dir / "rooms.yaml"
 
-    def test_round_trip_normalizes_captions(self):
-        rooms = {"room_002": RoomEntry("insert", "SCENE: a newspaper.  \n"
-                                                 "TEXT: German Wizard Splits Atom\n\n"),
-                 "room_001": RoomEntry("scene", "one line"),
-                 "room_020": RoomEntry("skip")}
-        rf.save_rooms(self.path, rooms)
-        loaded = rf.load_rooms(self.path)
-        self.assertEqual(list(loaded), ["room_001", "room_002", "room_020"])
-        self.assertEqual(loaded["room_002"], RoomEntry(
-            "insert", "SCENE: a newspaper.\nTEXT: German Wizard Splits Atom"))
-        self.assertEqual(loaded["room_020"], RoomEntry("skip", ""))
-        self.assertIn("caption: >", self.path.read_text())
-        self.assertFalse((self.dir / "rooms.yaml.tmp").exists())
-
-    def test_missing_or_null_caption_is_blank(self):
-        self.path.write_text("room_001:\n  kind: scene\nroom_002:\n  kind: skip\n  caption:\n")
-        self.assertEqual(rf.load_rooms(self.path),
-                         {"room_001": RoomEntry("scene"), "room_002": RoomEntry("skip")})
+    def test_load_rooms_normalizes_and_defaults_captions(self):
+        with self.subTest("round trip normalizes captions"):
+            rooms = {"room_002": RoomEntry("insert", "SCENE: a newspaper.  \n"
+                                                     "TEXT: German Wizard Splits Atom\n\n"),
+                     "room_001": RoomEntry("scene", "one line"),
+                     "room_020": RoomEntry("skip")}
+            rf.save_rooms(self.path, rooms)
+            loaded = rf.load_rooms(self.path)
+            self.assertEqual(list(loaded), ["room_001", "room_002", "room_020"])
+            self.assertEqual(loaded["room_002"], RoomEntry(
+                "insert", "SCENE: a newspaper.\nTEXT: German Wizard Splits Atom"))
+            self.assertEqual(loaded["room_020"], RoomEntry("skip", ""))
+            self.assertIn("caption: >", self.path.read_text())
+            self.assertFalse((self.dir / "rooms.yaml.tmp").exists())
+        with self.subTest("missing or null caption is blank"):
+            self.path.write_text("room_001:\n  kind: scene\nroom_002:\n  kind: skip\n  caption:\n")
+            self.assertEqual(rf.load_rooms(self.path),
+                             {"room_001": RoomEntry("scene"), "room_002": RoomEntry("skip")})
 
     def test_rejects_bad_entries(self):
         cases = {
@@ -50,10 +50,9 @@ class RoomsTests(unittest.TestCase):
                 self.path.write_text(text)
                 with self.assertRaisesRegex(RoomsFileError, message):
                     rf.load_rooms(self.path)
-
-    def test_missing_file_is_an_error(self):
-        with self.assertRaisesRegex(RoomsFileError, "file not found"):
-            rf.load_rooms(self.path)
+        with self.subTest("missing file"):
+            with self.assertRaisesRegex(RoomsFileError, "file not found"):
+                rf.load_rooms(self.path.parent / "nope.yaml")
 
     def test_check_coverage(self):
         rooms = {"room_001": RoomEntry("scene"), "room_009": RoomEntry("scene")}
@@ -77,21 +76,20 @@ class ReviewsTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.path = Path(tmp.name) / "reviews.yaml"
 
-    def test_round_trip(self):
-        reviews = {"room_058": Review(2, False, ("geometry: window 2 is shifted +1.3,+0.0 px",),
-                                      "geometry"),
-                   "room_001": Review(1, True, ())}
-        rf.save_reviews(self.path, reviews)
-        self.assertEqual(rf.load_reviews(self.path), reviews)
-
-    def test_source_defaults_to_review(self):
-        self.path.write_text("room_001:\n  attempt: 1\n  accepted: true\n  issues: []\n")
-        self.assertEqual(rf.load_reviews(self.path)["room_001"].source, "review")
-
-    def test_missing_file(self):
-        self.assertEqual(rf.load_reviews(self.path, optional=True), {})
-        with self.assertRaisesRegex(RoomsFileError, "file not found"):
-            rf.load_reviews(self.path)
+    def test_round_trip_and_file_handling(self):
+        with self.subTest("missing file"):
+            self.assertEqual(rf.load_reviews(self.path, optional=True), {})
+            with self.assertRaisesRegex(RoomsFileError, "file not found"):
+                rf.load_reviews(self.path)
+        with self.subTest("round trip"):
+            reviews = {"room_058": Review(2, False, ("geometry: window 2 is shifted +1.3,+0.0 px",),
+                                          "geometry"),
+                       "room_001": Review(1, True, ())}
+            rf.save_reviews(self.path, reviews)
+            self.assertEqual(rf.load_reviews(self.path), reviews)
+        with self.subTest("source defaults to review"):
+            self.path.write_text("room_001:\n  attempt: 1\n  accepted: true\n  issues: []\n")
+            self.assertEqual(rf.load_reviews(self.path)["room_001"].source, "review")
 
     def test_rejects_bad_verdicts(self):
         cases = {
