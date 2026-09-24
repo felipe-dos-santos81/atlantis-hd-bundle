@@ -33,16 +33,17 @@ def decoded_size(part):
 
 
 class TextSectionTests(unittest.TestCase):
-    def test_extracts_until_the_next_label(self):
-        self.assertEqual(p.text_section(CAPTION), "German Wizard Splits Atom (headline, top)")
-
-    def test_none_or_absent(self):
-        self.assertIsNone(p.text_section("SCENE: a cave.\nTEXT: none.\nINVARIANTS: x"))
-        self.assertIsNone(p.text_section("SCENE: a cave."))
-
-    def test_multi_line(self):
-        self.assertEqual(p.text_section("TEXT: ARTIFACTS (sign)\nAPOTHECARY (door)\nPALETTE: ochre"),
-                         "ARTIFACTS (sign)\nAPOTHECARY (door)")
+    def test_text_section(self):
+        cases = {
+            "extracts until the next label": (CAPTION, "German Wizard Splits Atom (headline, top)"),
+            "none - stated": ("SCENE: a cave.\nTEXT: none.\nINVARIANTS: x", None),
+            "none - absent": ("SCENE: a cave.", None),
+            "multi line": ("TEXT: ARTIFACTS (sign)\nAPOTHECARY (door)\nPALETTE: ochre",
+                          "ARTIFACTS (sign)\nAPOTHECARY (door)"),
+        }
+        for name, (text, expected) in cases.items():
+            with self.subTest(name):
+                self.assertEqual(p.text_section(text), expected)
 
 
 class RenderPromptTests(unittest.TestCase):
@@ -73,16 +74,21 @@ class RenderPromptTests(unittest.TestCase):
 
 
 class RequestTests(unittest.TestCase):
-    def test_caption_sends_every_image(self):
-        vlm = FakeVLM("SCENE: x")
-        images = [Image.new("RGB", (640, 144)), Image.new("RGB", (1280, 576))]
-        self.assertEqual(p.caption_room(images, vlm, "http://h/v1/", "m", "k"), "SCENE: x")
-        url, payload, timeout, token = vlm.calls[0]
-        self.assertEqual((url, timeout, token), ("http://h/v1/chat/completions",
-                                                 p.CAPTION_TIMEOUT, "k"))
-        parts = payload["messages"][1]["content"]
-        self.assertEqual((parts[0]["text"], len(parts)), (p.CAPTION_QUESTION, 3))
-        self.assertNotIn("response_format", payload)
+    def test_caption_room(self):
+        with self.subTest("sends every image"):
+            vlm = FakeVLM("SCENE: x")
+            images = [Image.new("RGB", (640, 144)), Image.new("RGB", (1280, 576))]
+            self.assertEqual(p.caption_room(images, vlm, "http://h/v1/", "m", "k"), "SCENE: x")
+            url, payload, timeout, token = vlm.calls[0]
+            self.assertEqual((url, timeout, token), ("http://h/v1/chat/completions",
+                                                     p.CAPTION_TIMEOUT, "k"))
+            parts = payload["messages"][1]["content"]
+            self.assertEqual((parts[0]["text"], len(parts)), (p.CAPTION_QUESTION, 3))
+            self.assertNotIn("response_format", payload)
+        with self.subTest("a truncated answer is refused"):
+            with self.assertRaisesRegex(ValueError, "truncated"):
+                p.caption_room([Image.new("RGB", (8, 8))], FakeVLM("x", "length"), "http://h/v1",
+                               "m", "")
 
     def test_images_are_scaled_to_the_longer_side(self):
         self.assertEqual(decoded_size(p._image(Image.new("RGB", (320, 144)))), (1280, 576))
@@ -90,11 +96,6 @@ class RequestTests(unittest.TestCase):
             path = Path(tmp) / "room.png"
             Image.new("RGB", (2560, 400)).save(path)
             self.assertEqual(decoded_size(p._image(path)), (1280, 200))
-
-    def test_a_truncated_answer_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "truncated"):
-            p.caption_room([Image.new("RGB", (8, 8))], FakeVLM("x", "length"), "http://h/v1",
-                           "m", "")
 
     def test_review_sends_pairs_then_the_overview(self):
         vlm = FakeVLM('{"accepted": false, "issues": ["window 2: the awning moved; move it back"]}')
