@@ -16,17 +16,18 @@ def sha256_file(path) -> str:
 
 
 def build_manifest(game_dir: str, records: list[dict], anomalies: int) -> dict:
+    ordered = sorted(records, key=lambda r: json.dumps(r, sort_keys=True, default=str))
     return {
         "game": {"dir": str(game_dir)},
-        "assets": records,
+        "assets": ordered,
         "summary": {
-            "rooms": len(records),
-            "backgrounds": len(records),
+            "rooms": len(ordered),
+            "backgrounds": len(ordered),
             "objects": 0,
             "costumes": 0,
             "fonts": 0,
             "anomalies": anomalies,
-            "expected": EXPECTED,
+            "expected": dict(EXPECTED),
         },
     }
 
