@@ -434,10 +434,13 @@ def write_nearest(args, room):
 
 
 def plan_line(args, room, entry, corrections):
-    """One dry-run line: the room's size, windows, wraparound, margins and corrections."""
+    """One dry-run line: the room's size, windows, wraparound, margins and
+    corrections; marked NOCAPTION instead of render for an uncaptioned room."""
     plan = room_geometry.plan_room(source_tree.open_indexed(args.src, room))
     w, h = room.out_size
-    line = (f"  render  {room.key} {entry.kind:6} -> {w}x{h}  windows "
+    captioned = bool(entry.caption.strip())
+    mark = "render" if captioned else "NOCAPTION"
+    line = (f"  {mark:7} {room.key} {entry.kind:6} -> {w}x{h}  windows "
             + " ".join(f"{win.x0}-{win.x1}" for win in plan.windows))
     extras = []
     if plan.wrap:
@@ -447,6 +450,8 @@ def plan_line(args, room, entry, corrections):
         extras.append(f"margins L{m.left} R{m.right} T{m.top} B{m.bottom}")
     if corrections:
         extras.append(f"{len(corrections)} correction(s)")
+    if not captioned:
+        extras.append("no caption - run: make caption")
     return line + ("  " + "; ".join(extras) if extras else "")
 
 
@@ -477,10 +482,11 @@ def cmd_batch(args):
         if not args.force and status == "stuck":
             stuck.append(room)
             continue
-        if not entry.caption.strip():
-            uncaptioned.append(room.key)
-            continue
-        work.append((room, entry, corrections_for(args, room, reviews)))
+        todo = (room, entry, corrections_for(args, room, reviews))
+        if entry.caption.strip():
+            work.append(todo)
+        else:
+            uncaptioned.append(todo)
 
     print(f"workflow: {workflow.name}  match strength: {args.match_strength}")
     print(f"{len(rooms)} room(s): render {len(work)}, copy {len(copies)} (kind skip), "
@@ -489,19 +495,18 @@ def cmd_batch(args):
         for room in copies:
             w, h = room.out_size
             print(f"  copy    {room.key} skip   -> {w}x{h} nearest")
-        for room, entry, corrections in work:
+        for room, entry, corrections in work + uncaptioned:
             try:
                 print(plan_line(args, room, entry, corrections))
             except ValueError as error:
                 print(f"  ERROR   {room.key}: {error}")
-        for key in uncaptioned:
-            print(f"  NOCAPTION {key} - run: make caption")
         for room in stuck:
             print(stuck_line(room))
         return 0
     if uncaptioned:
-        return fail(f"{len(uncaptioned)} selected room(s) have no caption in {args.rooms_file} "
-                    "- run: make caption\n  " + "\n  ".join(uncaptioned))
+        keys = [room.key for room, _, _ in uncaptioned]
+        return fail(f"{len(keys)} selected room(s) have no caption in {args.rooms_file} "
+                    "- run: make caption\n  " + "\n  ".join(keys))
     for room in copies:
         write_nearest(args, room)
         print(f"  copy    {room.key} (nearest 4x)")

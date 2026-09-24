@@ -319,9 +319,12 @@ class BatchTests(DriverFixture):
         self.assertEqual(code, 2)
         self.assertIn("run: make caption", err)
         mocks.render.assert_not_called()
+        # Regression: the dry run showed no plan for an uncaptioned room.
         code, out, _, _ = self.batch("--dry-run")
         self.assertEqual(code, 0)
-        self.assertIn("NOCAPTION room_001", out)
+        self.assertIn("NOCAPTION room_001 scene  -> 1280x576  windows 0-320  no caption - "
+                      "run: make caption", out)
+        self.assertIn("NOCAPTION room_002 scene  -> 2272x576  windows 0-320 248-568", out)
 
     def test_preflight(self):
         cases = {"down": ({"up": False}, "ComfyUI is not answering"),
