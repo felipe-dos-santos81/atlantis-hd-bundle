@@ -194,5 +194,90 @@ class RealCorpusTests(unittest.TestCase):
         self.assertEqual((self.plans[85].margins.left, self.plans[85].span), (66, (64, 320)))
 
 
+class WindowInputTests(unittest.TestCase):
+    def setUp(self):
+        self.plan = rg.plan_room(fixture_room(2))           # windows (0, 320), (248, 568)
+        self.guide = noise((2272, 576), seed=1)
+        self.canvas = noise((2272, 576), seed=2)
+
+    def test_a_first_window_is_painted_whole(self):
+        crop, composite, mask = rg.window_inputs(self.guide, self.canvas, self.plan.windows[0], None)
+        self.assertEqual(crop.size, (1280, 576))
+        self.assertEqual(composite.tobytes(), crop.tobytes())
+        self.assertEqual((mask.mode, set(np.asarray(mask).ravel())), ("L", {255}))
+
+    def test_a_later_window_holds_the_outer_half_of_its_overlap(self):
+        first, second = self.plan.windows
+        crop, composite, mask = rg.window_inputs(self.guide, self.canvas, second, first)
+        m = np.asarray(mask)
+        self.assertTrue((m[:, :144] == 0).all())                # 36 native columns held
+        ramp = m[0, 144:288]
+        self.assertTrue(((ramp > 0) & (ramp < 255)).all())
+        self.assertTrue((np.diff(ramp.astype(int)) >= 0).all())
+        self.assertTrue((m[:, 288:] == 255).all())
+        c = np.asarray(composite)
+        self.assertTrue((c[:, :288] == np.asarray(self.canvas)[:, 992:1280]).all())
+        self.assertTrue((c[:, 288:] == np.asarray(crop)[:, 288:]).all())
+
+    def test_paste_window_starts_mid_overlap(self):
+        first, second = self.plan.windows
+        rendered = noise((1280, 576), seed=3)
+        before = np.asarray(self.canvas).copy()
+        rg.paste_window(self.canvas, second, first, rendered)
+        after = np.asarray(self.canvas)
+        self.assertTrue((after[:, :1136] == before[:, :1136]).all())
+        self.assertTrue((after[:, 1136:] == np.asarray(rendered)[:, 144:]).all())
+
+
+class SeamTests(unittest.TestCase):
+    def setUp(self):
+        self.plan = rg.plan_room(fixture_room(3))           # wrap (840, 224)
+        self.guide = noise((4608, 576), seed=4)
+        self.canvas = noise((4608, 576), seed=5)
+
+    def test_seam_inputs_roll_the_join_into_the_middle(self):
+        strip, composite, mask = rg.seam_inputs(self.guide, self.canvas, self.plan)
+        self.assertEqual(strip.size, (1280, 576))
+        c, canvas = np.asarray(composite), np.asarray(self.canvas)
+        self.assertTrue((c[:, :640] == canvas[:, 2720:3360]).all())
+        self.assertTrue((c[:, 640:] == canvas[:, :640]).all())
+        m = np.asarray(mask)[0]
+        self.assertTrue((m[:320] == 0).all() and (m[960:] == 0).all())
+        self.assertTrue((m[480:800] == 255).all())
+        self.assertTrue(((m[320:480] > 0) & (m[320:480] < 255)).all())
+
+    def test_apply_seam_writes_both_ends(self):
+        rendered = noise((1280, 576), seed=6)
+        before = np.asarray(self.canvas).copy()
+        rg.apply_seam(self.canvas, self.plan, rendered)
+        after, r = np.asarray(self.canvas), np.asarray(rendered)
+        self.assertTrue((after[:, 3040:3360] == r[:, 320:640]).all())
+        self.assertTrue((after[:, :320] == r[:, 640:960]).all())
+        self.assertTrue((after[:, 320:3040] == before[:, 320:3040]).all())
+        self.assertTrue((after[:, 3360:] == before[:, 3360:]).all())
+
+
+class FixupTests(unittest.TestCase):
+    def test_wrap_copy_and_margin(self):
+        indexed = fixture_room(3)
+        out = np.asarray(rg.apply_fixups(noise((4608, 576), seed=7), rg.plan_room(indexed), indexed))
+        self.assertTrue((out[:, 3360:4256] == out[:, :896]).all())
+        self.assertTrue((out[:, 4256:] == 0).all())
+
+    def test_top_and_bottom_margins(self):
+        pixels = testkit.room_pixels(testkit.room(9, 320, 144))
+        pixels[:28], pixels[-26:] = 0, 0            # room 58's letterbox rows
+        indexed = testkit.indexed_image(pixels)
+        out = np.asarray(rg.apply_fixups(noise((1280, 576), seed=8), rg.plan_room(indexed), indexed))
+        self.assertTrue((out[:112] == 0).all() and (out[-104:] == 0).all())
+        self.assertFalse((out[112:-104] == 0).all())
+
+    def test_nothing_to_fix(self):
+        indexed = fixture_room(1)
+        image = noise((1280, 576), seed=9)
+        self.assertEqual(rg.apply_fixups(image, rg.plan_room(indexed), indexed).tobytes(),
+                         image.tobytes())
+
+
 if __name__ == "__main__":
     unittest.main()

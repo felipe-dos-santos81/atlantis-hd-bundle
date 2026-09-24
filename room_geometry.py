@@ -203,3 +203,96 @@ def stitch_boundaries(plan, width=WINDOW_WIDTH):
         q, period = width // 4, plan.wrap.period
         xs |= {(period - q) * SCALE, q * SCALE, period * SCALE}
     return sorted(xs)
+
+
+# ---- composites, stitch, seam, fix-ups --------------------------------------
+
+def _mask_row(width_4x, zero_until, full_from):
+    """A 4x mask row: 0 before `zero_until`, a ramp strictly between 0 and 255
+    up to `full_from`, 255 from there."""
+    row = np.full(width_4x, 255, np.uint8)
+    row[:zero_until] = 0
+    n = full_from - zero_until
+    if n > 0:
+        row[zero_until:full_from] = np.round(np.arange(1, n + 1) * 255 / (n + 1))
+    return row
+
+
+def _mask(row, height):
+    return Image.fromarray(np.tile(row, (height, 1)))
+
+
+def window_inputs(guide, canvas, window, previous):
+    """(guide crop, composite, mask) for rendering `window`, all 4x.
+
+    `guide` is the 4x guide and `canvas` the stitch so far. The composite is the
+    guide crop with its overlap with `previous` taken from the canvas. The mask
+    (255 paints, 0 keeps) holds the overlap's outer half, ramps across its inner
+    half and frees the rest; a first window is painted whole.
+    """
+    h = guide.height
+    crop = guide.crop((window.x0 * SCALE, 0, window.x1 * SCALE, h))
+    composite = crop.copy()
+    if previous is None:
+        return crop, composite, _mask(np.full(crop.width, 255, np.uint8), h)
+    overlap = previous.x1 - window.x0
+    composite.paste(canvas.crop((window.x0 * SCALE, 0, previous.x1 * SCALE, h)), (0, 0))
+    row = _mask_row(crop.width, (overlap // 2) * SCALE, overlap * SCALE)
+    return crop, composite, _mask(row, h)
+
+
+def paste_window(canvas, window, previous, rendered):
+    """Stitch `rendered`, the window's 4x render, into `canvas` from stitch_from on."""
+    x = stitch_from(window, previous)
+    offset = (x - window.x0) * SCALE
+    canvas.paste(rendered.crop((offset, 0, rendered.width, rendered.height)), (x * SCALE, 0))
+
+
+def _rolled(image, period, half):
+    """The 4x columns of native [period - half, period) followed by [0, half)."""
+    h = image.height
+    strip = Image.new("RGB", (2 * half * SCALE, h))
+    strip.paste(image.crop(((period - half) * SCALE, 0, period * SCALE, h)), (0, 0))
+    strip.paste(image.crop((0, 0, half * SCALE, h)), (half * SCALE, 0))
+    return strip
+
+
+def seam_inputs(guide, canvas, plan, width=WINDOW_WIDTH):
+    """(guide strip, composite, mask) for the seam window across a wraparound's join.
+
+    The strip is the span's last width/2 columns followed by its first width/2.
+    The mask holds the outer quarters, ramps across the next eighths and paints
+    the middle quarter fully.
+    """
+    period, half, q, e = plan.wrap.period, width // 2, width // 4, width // 8
+    up = _mask_row(width * SCALE, q * SCALE, (q + e) * SCALE)
+    row = np.minimum(up, up[::-1])
+    return _rolled(guide, period, half), _rolled(canvas, period, half), _mask(row, guide.height)
+
+
+def apply_seam(canvas, plan, rendered, width=WINDOW_WIDTH):
+    """Write the seam render's middle half back to both ends of `canvas`."""
+    period, half, q = plan.wrap.period, width // 2, width // 4
+    h = canvas.height
+    canvas.paste(rendered.crop((q * SCALE, 0, half * SCALE, h)), ((period - q) * SCALE, 0))
+    canvas.paste(rendered.crop((half * SCALE, 0, (half + q) * SCALE, h)), (0, 0))
+
+
+def apply_fixups(image, plan, indexed):
+    """A copy of the 4x `image` with the wraparound's repeat copied from the
+    room's start, and the margins set to the source's flat colours."""
+    out = image.copy()
+    h = out.height
+    if plan.wrap:
+        period, span = plan.wrap.period, plan.wrap.span
+        out.paste(out.crop((0, 0, span * SCALE, h)), (period * SCALE, 0))
+    m = plan.margins
+    if m.left or m.right or m.top or m.bottom:
+        flat = to_rgb(indexed).resize(out.size, Image.Resampling.NEAREST)
+        w, rows = plan.width, plan.height
+        for x0, y0, x1, y1 in ((0, 0, m.left, rows), (w - m.right, 0, w, rows),
+                               (0, 0, w, m.top), (0, rows - m.bottom, w, rows)):
+            if x1 > x0 and y1 > y0:
+                box = (x0 * SCALE, y0 * SCALE, x1 * SCALE, y1 * SCALE)
+                out.paste(flat.crop(box), box[:2])
+    return out
