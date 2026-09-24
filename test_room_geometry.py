@@ -31,14 +31,14 @@ def spans(windows):
 
 
 class GuideTests(unittest.TestCase):
-    def test_to_rgb_and_build_guide(self):
-        with self.subTest("to_rgb uses the exact palette"):
-            index = int(testkit.room_pixels(testkit.DEFAULT_ROOMS[0])[0, 0])
-            self.assertEqual(rg.to_rgb(fixture_room(1)).getpixel((0, 0)), testkit.PALETTE[index])
-        with self.subTest("build_guide sizes"):
-            guide = rg.build_guide(fixture_room(2))
-            self.assertEqual((guide.native.size, guide.full.size), ((568, 144), (2272, 576)))
-            self.assertEqual((guide.native.mode, guide.full.mode), ("RGB", "RGB"))
+    def test_to_rgb_uses_the_exact_palette(self):
+        index = int(testkit.room_pixels(testkit.DEFAULT_ROOMS[0])[0, 0])
+        self.assertEqual(rg.to_rgb(fixture_room(1)).getpixel((0, 0)), testkit.PALETTE[index])
+
+    def test_build_guide_sizes(self):
+        guide = rg.build_guide(fixture_room(2))
+        self.assertEqual((guide.native.size, guide.full.size), ((568, 144), (2272, 576)))
+        self.assertEqual((guide.native.mode, guide.full.mode), ("RGB", "RGB"))
 
     def test_dedither_softens_the_checkerboard(self):
         board = checkerboard((100, 100, 100), (130, 130, 130))
@@ -133,15 +133,16 @@ class RoomPlanTests(unittest.TestCase):
     def test_fixture_rooms(self):
         one = rg.plan_room(fixture_room(1))
         self.assertEqual((spans(one.windows), one.wrap, one.span), ([(0, 320)], None, (0, 320)))
-        self.assertEqual(rg.stitch_boundaries(one), [])
+        self.assertEqual(rg.stitch_boundaries(one), [], msg="stitch boundaries")
         two = rg.plan_room(fixture_room(2))
         self.assertEqual(spans(two.windows), [(0, 320), (248, 568)])
-        self.assertEqual(rg.stitch_boundaries(two), [1136])
+        self.assertEqual(rg.stitch_boundaries(two), [1136], msg="stitch boundaries")
         wrap = rg.plan_room(fixture_room(3))
         self.assertEqual((wrap.wrap, wrap.span, wrap.margins),
                          (rg.Wrap(840, 224), (0, 840), rg.Margins(0, 88, 0, 0)))
         self.assertEqual(len(wrap.windows), 4)
-        self.assertEqual(rg.stitch_boundaries(wrap), [320, 976, 1664, 2368, 3040, 3360])
+        self.assertEqual(rg.stitch_boundaries(wrap), [320, 976, 1664, 2368, 3040, 3360],
+                         msg="stitch boundaries")
 
     def test_margins_round_the_span_out_to_8_columns(self):
         pixels = testkit.room_pixels(testkit.room(9, 320, 200))
