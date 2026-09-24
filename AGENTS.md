@@ -83,10 +83,25 @@ Per room (`atl_recreate.render_room`):
 3. Each window, left to right: `window_inputs` (guide crop, composite, mask),
    `comfy_client.render_window`, `paste_window`.
 4. A wraparound: `seam_inputs`, `render_window`, `apply_seam`.
-5. `colour_match.match` toward the guide (`--match-strength`), then
-   `apply_fixups`.
-6. `geometry_check.check` (shift per room and per window, edge agreement,
-   seam ratios relative to the guide's); promote on a pass.
+5. `finish_room`: `colour_match.match` toward the guide
+   (`--match-strength`; a float sRGB to CIE Lab (D65) transform in numpy,
+   exact for every 24-bit colour, where Pillow's 8-bit Lab moved saturated
+   colours up to 39 levels), then `apply_fixups`, then
+6. `geometry_check.check`: shift per room and per window; edge agreement per
+   room and per window (the room's edge maps masked to the window's columns),
+   with hysteresis: a source edge is strong above `EDGE_THRESHOLD` (80) and
+   kept by a render edge above `RENDER_EDGE_THRESHOLD` (`EDGE_THRESHOLD / 2`)
+   within 1 px; a window with fewer than `MIN_WINDOW_EDGES` (100) strong
+   source edge pixels reads 1.0; seam ratios relative to the guide's.
+   Promote on a pass; a rejection goes to `reviews.yaml` as `source: geometry`.
+
+A render that raises (a ComfyUI error, a timeout, a wrong-size window,
+Ctrl-C) writes `attempt-N.error.txt` (workflow, seed, window, seconds,
+error) and no `attempt-N.json`, so the attempt reads as failed. Batch then
+sweeps the room's stray outputs; on Ctrl-C `comfy_client` has already sent
+`/interrupt`, and batch re-raises after the sweep and `/free`. Failed
+attempts never count toward STUCK, and the next attempt still carries the
+current review's corrections (see §1).
 
 Node ids in `recreation_qwen2511_canny.json`: 1 LoadImage (the guide window,
 also the Canny input), 2 LoadImage (the composite), 3 LoadImageMask (red),
@@ -157,10 +172,18 @@ Rules:
 - a rule is tested once, at the layer that owns it;
 - a regression test names what it guards.
 
-`test_room_geometry.RealCorpusTests` pins the measured corpus: 91 plannable
-rooms, room 58 the only wraparound at (840, 224) with margins
-(0, 88, 28, 26), and room 85's side margin. It runs whenever
-`../atlantis-textures/out` (or `ATL_SRC`) exists.
+Two test classes run on the real corpus, whenever `../atlantis-textures/out`
+(or `ATL_SRC`) exists; `testkit.REAL_SRC`, `testkit.needs_real_corpus` and
+`testkit.real_rooms()` are their one definition of it:
+- `test_room_geometry.RealCorpusTests` pins the measured corpus: 91 plannable
+  rooms, room 58 the only wraparound at (840, 224) with margins
+  (0, 88, 28, 26), and room 85's side margin.
+- `test_atl_recreate.RealCorpusTests` pins the gate: each of the 91 rooms'
+  own guide, through `finish_room` at `DEFAULT_MATCH_STRENGTH`, passes
+  `geometry_check.check` with its windows and boundaries (a perfect render
+  of any real room is promotable). Measured at the fix wave: every room and
+  every window agrees 1.0; without the hysteresis room 95 agrees 0.27. It
+  takes about 20 s, most of it the colour match.
 
 ## 6. Live checks and the spike
 
@@ -169,3 +192,10 @@ here; Task 18 records the spike's decisions (the default workflow and its
 strength or denoise, the de-dither method, `REFERENCE`,
 `WINDOW_WIDTH`/`WINDOW_OVERLAP`, `MIN_EDGE_AGREEMENT`, the colour-match
 strength) with their evidence.
+
+- Include room 95 in the spike. It is the corpus's weakest-edge room: a
+  320x200 all-texture sea whose 122 strong source edge pixels nearly all sit
+  just over `EDGE_THRESHOLD` (98% between 80 and 110). Its own guide agreed
+  0.27 before `RENDER_EDGE_THRESHOLD`, 0.64 with a render threshold of 75 and
+  0.96 at 70; the spike's calibration of `RENDER_EDGE_THRESHOLD` and
+  `MIN_EDGE_AGREEMENT` must keep a good render of it promotable.

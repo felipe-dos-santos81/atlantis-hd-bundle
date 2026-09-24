@@ -97,14 +97,22 @@ game's art does.
 
 ## Checks
 
-Before a render is promoted, `make batch` checks it:
+Before a render is promoted, `make batch` colour-matches it toward its
+guide in float CIE Lab (a render whose colours already agree comes back
+within one level) and checks it:
 
 - **Size:** exactly 4x native, RGB.
 - **Geometry:** the render, box-downscaled to native size, must not be shifted
   by 0.5 px or more against the de-dithered source (over the room and within
   each window), and must keep at least 80% of the source's strong edges
-  within 1 px. A failure is written to `reviews.yaml` as `source: geometry`,
-  and the next batch retries the room.
+  within 1 px, over the room and within each window. A source edge is strong
+  at a Sobel magnitude of 80 (`EDGE_THRESHOLD`); a render edge keeps it from
+  40 (`RENDER_EDGE_THRESHOLD`), since the 4x round trip weakens marginal
+  edges. A window with fewer than 100 strong source edge pixels
+  (`MIN_WINDOW_EDGES`) is too sparse to judge and reads 1.0. A failure is
+  written to `reviews.yaml` as `source: geometry`, and the next batch retries
+  the room. A test pins the gate on the real corpus: each of the 91 scene and
+  insert rooms' own guide, colour-matched and fixed up, passes.
 - **Seams:** a window boundary whose colour step is 3 times the local texture
   (measured relative to the source's own step there) is printed as a warning.
 
