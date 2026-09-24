@@ -37,7 +37,8 @@ class FakeComfy:
 
 class TemplateTests(unittest.TestCase):
     def test_each_record_matches_its_template(self):
-        self.assertIn(comfy_client.DEFAULT_WORKFLOW, comfy_client.WORKFLOWS)
+        self.assertIn(comfy_client.DEFAULT_WORKFLOW, comfy_client.WORKFLOWS,
+                     msg="the default workflow is registered")
         for name, wf in comfy_client.WORKFLOWS.items():
             with self.subTest(name):
                 prompt = comfy_client.load_template(wf)
@@ -159,45 +160,45 @@ class RenderWindowTests(unittest.TestCase):
 
 
 class PreflightTests(unittest.TestCase):
-    def test_preflight_checks(self):
+    def test_missing_model_files(self):
         wf = comfy_client.WORKFLOWS["qwen-image-2.1-i2i"]
-        with self.subTest("missing model files"):
-            with tempfile.TemporaryDirectory() as tmp:
-                missing = comfy_client.missing_model_files(wf, tmp)
-                self.assertEqual(missing, ["models/diffusion_models/qwen_image_2.1_bf16.safetensors",
-                                           "models/text_encoders/qwen3vl_8b_bf16.safetensors",
-                                           "models/vae/qwen_image_2.1_vae_bf16.safetensors"])
-                for rel in missing:
-                    path = Path(tmp) / rel
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                    path.touch()
-                self.assertEqual(comfy_client.missing_model_files(wf, tmp), [])
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = comfy_client.missing_model_files(wf, tmp)
+            self.assertEqual(missing, ["models/diffusion_models/qwen_image_2.1_bf16.safetensors",
+                                       "models/text_encoders/qwen3vl_8b_bf16.safetensors",
+                                       "models/vae/qwen_image_2.1_vae_bf16.safetensors"])
+            for rel in missing:
+                path = Path(tmp) / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+            self.assertEqual(comfy_client.missing_model_files(wf, tmp), [])
 
-        with self.subTest("missing nodes"):
-            known = {"TextEncodeQwenImage21", "DifferentialDiffusion", "SetLatentNoiseMask"}
+    def test_missing_nodes(self):
+        wf = comfy_client.WORKFLOWS["qwen-image-2.1-i2i"]
+        known = {"TextEncodeQwenImage21", "DifferentialDiffusion", "SetLatentNoiseMask"}
 
-            def http(url, timeout=60):
-                cls = url.rsplit("/", 1)[1]
-                if cls == "SetLatentNoiseMask":
-                    raise RuntimeError("HTTP 500")
-                return {cls: {}} if cls in known else {}
-            self.assertEqual(comfy_client.missing_nodes(wf, "http://c", http),
-                             ["LoadImageMask", "SetLatentNoiseMask"])
+        def http(url, timeout=60):
+            cls = url.rsplit("/", 1)[1]
+            if cls == "SetLatentNoiseMask":
+                raise RuntimeError("HTTP 500")
+            return {cls: {}} if cls in known else {}
+        self.assertEqual(comfy_client.missing_nodes(wf, "http://c", http),
+                         ["LoadImageMask", "SetLatentNoiseMask"])
 
-        with self.subTest("is up and free"):
-            calls = []
+    def test_is_up_and_free(self):
+        calls = []
 
-            def http(url, data=None, timeout=60):
-                calls.append((url, data))
-                return {}
-            self.assertTrue(comfy_client.is_up("http://c", http))
-            comfy_client.free_models("http://c", http)
-            self.assertEqual(calls[-1], ("http://c/free",
-                                         b'{"unload_models": true, "free_memory": true}'))
+        def http(url, data=None, timeout=60):
+            calls.append((url, data))
+            return {}
+        self.assertTrue(comfy_client.is_up("http://c", http))
+        comfy_client.free_models("http://c", http)
+        self.assertEqual(calls[-1], ("http://c/free",
+                                     b'{"unload_models": true, "free_memory": true}'))
 
-            def down(url, timeout=60):
-                raise OSError("refused")
-            self.assertFalse(comfy_client.is_up("http://c", down))
+        def down(url, timeout=60):
+            raise OSError("refused")
+        self.assertFalse(comfy_client.is_up("http://c", down))
 
 
 class SweepTests(unittest.TestCase):
