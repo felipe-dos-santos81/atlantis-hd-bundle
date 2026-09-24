@@ -1,0 +1,32 @@
+# Makefile for the Atlantis background regeneration kit
+# Pipeline: caption -> (edit rooms.yaml) -> batch -> review -> batch ... -> verify
+SERVICE = Atlantis Background Regen
+
+VENV_DIR = .venv
+PY = $(VENV_DIR)/bin/python
+
+.PHONY: help install check test clean
+
+help: ## Print this help message
+	@printf '\033[01;32m${SERVICE}\033[00;37m\n\n'
+	@printf "\033[33mUsage:\033[0m\n  make [target] [arg=\"val\"...]\n\n\033[33mTargets:\033[0m\n"
+	@grep -E '^[-a-zA-Z0-9_\.\/]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; \
+		{printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}'
+
+# ── Environment ──────────────────────────────────────────────────────────────
+
+install: ## Create .venv with Pillow, PyYAML and numpy (re-running is safe)
+	@if [ ! -x "$(PY)" ]; then python3 -m venv $(VENV_DIR); fi
+	@$(PY) -c 'import PIL, yaml, numpy' 2>/dev/null || $(VENV_DIR)/bin/pip install -q "pillow>=10" "pyyaml>=6" "numpy>=1.26"
+
+clean: ## Remove __pycache__ (never touches data/)
+	find . -path ./.venv -prune -o -type d -name "__pycache__" -exec rm -rf {} +
+
+# ── Development ──────────────────────────────────────────────────────────────
+
+check: install ## Byte-compile the Python modules
+	@$(PY) -m py_compile *.py && echo "check ok"
+
+test: install ## Run the unit tests (no GPU, no network)
+	$(PY) -m unittest discover -s . -p 'test_*.py'
