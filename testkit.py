@@ -7,12 +7,17 @@ in P mode at native size, and manifest.json whose assets[] carry room, file,
 width, height, role and sha256.
 """
 
+import contextlib
 import hashlib
+import io
 import json
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
+
+import atl_recreate as a
+from rooms_file import RoomEntry, save_rooms
 
 
 # Indices 2-13 lie far apart (RGB distance over 64), so de-dithering keeps
@@ -89,3 +94,23 @@ def rewrite_manifest(src, change):
     doc = json.loads(path.read_text())
     change(doc["assets"])
     path.write_text(json.dumps(doc, indent=1))
+
+
+def write_rooms(path, kinds=None, caption="SCENE: a test room.\nTEXT: none", rooms=DEFAULT_ROOMS):
+    """Write a rooms.yaml covering `rooms`: kind scene with `caption`, unless
+    `kinds` maps a room number to another kind. Room 4 is skip by default;
+    skip rooms get no caption."""
+    kinds = {4: "skip", **(kinds or {})}
+    entries = {}
+    for spec in rooms:
+        kind = kinds.get(spec["room"], "scene")
+        entries[f"room_{spec['room']:03d}"] = RoomEntry(kind, "" if kind == "skip" else caption)
+    save_rooms(path, entries)
+
+
+def run_cli(argv):
+    """Run atl_recreate.main(argv), capturing stdout and stderr: (code, out, err)."""
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = a.main(list(argv))
+    return code, out.getvalue(), err.getvalue()
