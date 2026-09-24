@@ -168,9 +168,10 @@ Never re-implement these in a test module.
 
 Rules:
 - one test module per production module;
-- data-only variations are one `subTest` table; keep the suite small: a test
-  covers one behaviour, and the facets of one run are asserted in one test.
-  Add a separate test only for a different behaviour or a named regression;
+- data-only variations are one `subTest` table;
+- keep the suite small: a test covers one behaviour, and the facets of one
+  run are asserted in one test; add a separate test only for a different
+  behaviour or a named regression;
 - a rule is tested once, at the layer that owns it;
 - a regression test names what it guards.
 
