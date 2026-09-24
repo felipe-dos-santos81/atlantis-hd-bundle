@@ -203,7 +203,7 @@ class RenderRoomTests(DriverFixture):
             self.assertTrue((audit / "attempt-1.tiles" / name).is_file(), name)
         kw = stub.render.call_args.kwargs
         self.assertEqual((kw["seed"], kw["reference"], kw["name"], kw["negative"]),
-                         (42, "guide", "room_001_window-1", PAINTED_NEGATIVE))
+                         (42, "guide", "room_001_a1-window-1", PAINTED_NEGATIVE))
         self.assertNotIn("one window of a wide scrolling room", kw["positive"])
         self.assertEqual(list((self.comfy_dir / "output" / "atl").iterdir()), [])
 
@@ -211,7 +211,7 @@ class RenderRoomTests(DriverFixture):
         (_, result), stub = self.render(2)
         self.assertTrue(result.passed, result.issues)
         calls = [c.kwargs for c in stub.render.call_args_list]
-        self.assertEqual([c["name"] for c in calls], ["room_002_window-1", "room_002_window-2"])
+        self.assertEqual([c["name"] for c in calls], ["room_002_a1-window-1", "room_002_a1-window-2"])
         self.assertIn("from 44% to 100%", calls[1]["positive"])
         with Image.open(calls[1]["mask"]) as mask:
             self.assertEqual((mask.getpixel((0, 0)), mask.getpixel((400, 0))), (0, 255))
@@ -222,7 +222,7 @@ class RenderRoomTests(DriverFixture):
         self.assertTrue(result.passed, result.issues)
         calls = [c.kwargs for c in stub.render.call_args_list]
         self.assertEqual([c["name"] for c in calls],
-                         [f"room_003_window-{k}" for k in (1, 2, 3, 4)] + ["room_003_seam"])
+                         [f"room_003_a1-window-{k}" for k in (1, 2, 3, 4)] + ["room_003_a1-seam"])
         self.assertIn(SEAM_NOTE, calls[-1]["positive"])
         with Image.open(self.dst / "room_003.png") as im:
             out = np.asarray(im.convert("RGB"))
@@ -250,8 +250,12 @@ class RenderRoomTests(DriverFixture):
     def test_attempts_continue_with_the_next_seed_and_carry_corrections(self):
         self.render(1)
         (attempt, _), stub = self.render(1, corrections=["the lamp moved"])
-        self.assertEqual((attempt, stub.render.call_args.kwargs["seed"]), (2, 43))
-        self.assertIn("the lamp moved", stub.render.call_args.kwargs["positive"])
+        kw = stub.render.call_args.kwargs
+        self.assertEqual((attempt, kw["seed"]), (2, 43))
+        self.assertIn("the lamp moved", kw["positive"])
+        # Regression: the same name and seed across runs could hit ComfyUI's cache.
+        self.assertEqual(kw["name"], "room_001_a2-window-1")
+        self.assertTrue((self.dst / ".quality/room_001/attempt-2.tiles/window-1.png").is_file())
 
 
 class BatchTests(DriverFixture):
@@ -332,7 +336,7 @@ class BatchTests(DriverFixture):
                                                                   "move it back",))})
         _, _, _, mocks = self.batch()
         self.assertEqual({c.kwargs["name"] for c in mocks.render.call_args_list},
-                         {"room_002_window-1", "room_002_window-2"})
+                         {"room_002_a2-window-1", "room_002_a2-window-2"})
         self.assertIn("the awning moved", mocks.render.call_args.kwargs["positive"])
 
     def test_a_room_rejected_max_attempts_times_waits(self):
@@ -404,12 +408,22 @@ class BatchTests(DriverFixture):
         self.assertTrue((self.dst / "room_002.png").is_file())
         mocks.freed.assert_called_once()
 
+    def test_ctrl_c_sweeps_the_room_and_frees_the_models(self):
+        # Regression: KeyboardInterrupt skipped the sweep of the room's stray outputs.
+        def ctrl_c(workflow, **kw):
+            raise KeyboardInterrupt
+        with testkit.comfy_stub(comfy_dir=self.comfy_dir, render=ctrl_c) as mocks:
+            with self.assertRaises(KeyboardInterrupt):
+                self.run_cli("batch", "--room", "1")
+        mocks.sweep.assert_called_once_with("room_001", self.comfy_dir)
+        mocks.freed.assert_called_once()
+
     def test_an_interrupted_room_starts_over_as_a_new_attempt(self):
         # Review Focus: a crash or timeout mid-room, then a rerun.
         good = testkit.fake_render()
 
         def render(workflow, **kw):
-            if kw["name"] == "room_002_window-2":
+            if kw["name"] == "room_002_a1-window-2":
                 raise TimeoutError("no history for p1 within 1800s")
             return good(workflow, **kw)
         self.batch("--room", "2", render=render)
@@ -506,7 +520,7 @@ class ReviewTests(DriverFixture):
         with testkit.comfy_stub(comfy_dir=self.comfy_dir, render=testkit.fake_render()) as mocks:
             self.run_cli("batch")
         self.assertEqual({c.kwargs["name"] for c in mocks.render.call_args_list},
-                         {"room_002_window-1", "room_002_window-2"})
+                         {"room_002_a2-window-1", "room_002_a2-window-2"})
 
     def test_a_geometry_rejected_attempt_is_not_reviewed(self):
         # Review Focus: review must not judge an output older than the latest attempt.

@@ -272,7 +272,9 @@ def render_room(args, workflow, room, entry, corrections):
         saved = comfy_client.render_window(
             workflow, guide=paths["guide"], composite=paths["composite"], mask=paths["mask"],
             reference=REFERENCE, positive=positive, negative=PAINTED_NEGATIVE, seed=seed,
-            name=f"{room.key}_{label}", url=COMFY_URL, comfy_dir=COMFY_DIR)
+            # The attempt in the name keeps ComfyUI's cache from answering a rerun of
+            # the same inputs and seed with an old render.
+            name=f"{room.key}_a{attempt}-{label}", url=COMFY_URL, comfy_dir=COMFY_DIR)
         out = tiles / f"{label}.png"
         shutil.move(saved, out)
         with Image.open(out) as im:
@@ -503,6 +505,9 @@ def cmd_batch(args):
             print(f"[{i}/{len(work)}] render {room.key} ({entry.kind}){note}", flush=True)
             try:
                 attempt, result = render_room(args, workflow, room, entry, corrections)
+            except KeyboardInterrupt:
+                comfy_client.sweep_outputs(room.key, COMFY_DIR)
+                raise
             except Exception as error:
                 failed += 1
                 swept = comfy_client.sweep_outputs(room.key, COMFY_DIR)

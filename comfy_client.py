@@ -159,19 +159,19 @@ def stage_input(source, stage_name, comfy_dir):
     shutil.copyfile(source, input_dir / stage_name)
 
 
-def execute(prompt, url, http, timeout, sleep, interrupt_on_timeout=False):
+def execute(prompt, url, http, timeout, sleep, interrupt=False):
     """Queue `prompt` and return its history entry once it succeeded.
 
     Raises RuntimeError when ComfyUI reports a failed execution and
-    TimeoutError when the history never appears; with `interrupt_on_timeout`
-    it first asks ComfyUI to stop the prompt (best effort: a failed interrupt
-    must not hide the timeout).
+    TimeoutError when the history never appears. With `interrupt`, a timeout
+    or a KeyboardInterrupt while waiting first asks ComfyUI to stop the prompt
+    (best effort: a failed interrupt must not hide the original exception).
     """
     resp = http(f"{url}/prompt", json.dumps({"prompt": prompt}).encode())
     try:
         entry = wait_history(url, resp["prompt_id"], http, timeout, sleep)
-    except TimeoutError:
-        if interrupt_on_timeout:
+    except (TimeoutError, KeyboardInterrupt):
+        if interrupt:
             try:
                 http(f"{url}/interrupt", json.dumps({"prompt_id": resp["prompt_id"]}).encode())
             except Exception:
@@ -199,7 +199,7 @@ def render_window(workflow, *, guide, composite, mask, reference, positive, nega
     output/atl/ as <name>_NNNNN_.png; the caller moves it away and checks its
     size. Raises RuntimeError when ComfyUI reports a failed execution, and
     TimeoutError, after asking ComfyUI to interrupt the prompt, when no history
-    appears in time.
+    appears in time; a KeyboardInterrupt while waiting interrupts the prompt too.
     """
     if reference not in REFERENCES:
         raise ValueError(f"reference must be one of {', '.join(REFERENCES)}, got {reference!r}")
@@ -218,15 +218,16 @@ def render_window(workflow, *, guide, composite, mask, reference, positive, nega
                                (workflow.seed, seed)):
         prompt[node]["inputs"][key] = value
     prompt[workflow.save]["inputs"]["filename_prefix"] = f"{OUTPUT_PREFIX}/{name}"
-    # A timed-out render is still running in ComfyUI; interrupt it so it does not
-    # hold the queue and write a file nobody collects.
-    entry = execute(prompt, url, http, timeout, sleep, interrupt_on_timeout=True)
+    # A timed-out or Ctrl-C'd render is still running in ComfyUI; interrupt it so
+    # it does not hold the queue (and ~45 GB) and write a file nobody collects.
+    entry = execute(prompt, url, http, timeout, sleep, interrupt=True)
     return output_path(comfy_dir, entry["outputs"][workflow.save]["images"][0])
 
 
 def sweep_outputs(room_key, comfy_dir):
     """Delete the room's leftover window renders under output/atl/, named as
-    SaveImage names them: <room_key>_<label>_NNNNN_.png. Returns the count.
+    SaveImage names them: <room_key>_a<attempt>-<label>_NNNNN_.png. Returns the
+    count.
 
     A failed room may leave renders ComfyUI finished after the driver gave up;
     room keys are room_NNN, so one room's pattern never matches another's.

@@ -28,9 +28,13 @@ Rules that must survive any change:
 - **Services are external.** The driver never starts or stops vLLM or ComfyUI.
   It checks `GET /v1/models` and `GET /queue`. Its only state-changing ComfyUI
   calls are `POST /free` (at the end of batch and the start of review) and
-  `POST /interrupt` for a timed-out prompt. After a failed room it deletes
-  that room's own leftover renders (`comfy_client.sweep_outputs`, anchored to
-  SaveImage's `<room_key>_<label>_NNNNN_.png` naming).
+  `POST /interrupt` (sent only by `comfy_client`) for a prompt that timed out
+  or was stopped with Ctrl-C. After a failed or Ctrl-C'd room it deletes that
+  room's own leftover renders (`comfy_client.sweep_outputs`, anchored to
+  SaveImage's `<room_key>_a<attempt>-<label>_NNNNN_.png` naming). The attempt
+  in the ComfyUI-facing name keeps ComfyUI's cache from answering a rerun
+  with an old render; the audit tiles keep the plain `window-K` and `seam`
+  names.
 - **Unified memory.** vLLM holds about 73 GB and a render about 45 GB of the
   GB10's 121 GB. `batch` refuses below `MEMORY_FLOOR_GB` (45) unless
   `--no-memory-check`.

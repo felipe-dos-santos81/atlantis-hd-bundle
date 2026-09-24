@@ -98,22 +98,22 @@ class RenderWindowTests(unittest.TestCase):
         for part in ("guide", "composite", "mask"):
             Image.new("RGB", (32, 32)).save(self.inputs / f"{part}.png")
 
-    def render(self, workflow, reference="guide", http=None, timeout=60):
+    def render(self, workflow, reference="guide", http=None, timeout=60, sleep=lambda s: None):
         http = http or FakeComfy(self.comfy_dir)
         path = comfy_client.render_window(
             comfy_client.WORKFLOWS[workflow], guide=self.inputs / "guide.png",
             composite=self.inputs / "composite.png", mask=self.inputs / "mask.png",
             reference=reference, positive="paint it", negative="no photo", seed=43,
-            name="room_001_window-1", url="http://c", comfy_dir=self.comfy_dir, http=http,
-            timeout=timeout, sleep=lambda s: None)
+            name="room_001_a1-window-1", url="http://c", comfy_dir=self.comfy_dir, http=http,
+            timeout=timeout, sleep=sleep)
         return path, http
 
     def test_fills_the_2511_graph(self):
         path, http = self.render("qwen-edit-2511-canny")
-        self.assertEqual(path, self.comfy_dir / "output" / "atl" / "room_001_window-1_00001_.png")
+        self.assertEqual(path, self.comfy_dir / "output" / "atl" / "room_001_a1-window-1_00001_.png")
         prompt = http.calls[0][1]["prompt"]
         for node, part in (("1", "guide"), ("2", "composite"), ("3", "mask")):
-            staged = f"__atl_room_001_window-1_{part}.png"
+            staged = f"__atl_room_001_a1-window-1_{part}.png"
             self.assertEqual(prompt[node]["inputs"]["image"], staged)
             self.assertTrue((self.comfy_dir / "input" / staged).is_file())
         self.assertEqual((prompt["9"]["inputs"]["prompt"], prompt["10"]["inputs"]["prompt"]),
@@ -121,7 +121,7 @@ class RenderWindowTests(unittest.TestCase):
         self.assertEqual(prompt["13"]["inputs"]["seed"], 43)
         self.assertEqual((prompt["9"]["inputs"]["image1"], prompt["10"]["inputs"]["image1"]),
                          (["1", 0], ["1", 0]))
-        self.assertEqual(prompt["15"]["inputs"]["filename_prefix"], "atl/room_001_window-1")
+        self.assertEqual(prompt["15"]["inputs"]["filename_prefix"], "atl/room_001_a1-window-1")
 
     def test_the_reference_can_be_the_composite(self):
         _, http = self.render("qwen-image-2.1-i2i", reference="composite")
@@ -141,6 +141,16 @@ class RenderWindowTests(unittest.TestCase):
         http = FakeComfy(self.comfy_dir, history=False)
         with self.assertRaises(TimeoutError):
             self.render("qwen-image-2.1-i2i", http=http, timeout=0)
+        self.assertEqual(http.calls[-1], ("http://c/interrupt", {"prompt_id": "p1"}))
+
+    def test_ctrl_c_interrupts_the_prompt(self):
+        # Regression: KeyboardInterrupt bypassed the interrupt, so the render kept its
+        # memory and a /free queued behind it.
+        def ctrl_c(seconds):
+            raise KeyboardInterrupt
+        http = FakeComfy(self.comfy_dir, history=False)
+        with self.assertRaises(KeyboardInterrupt):
+            self.render("qwen-image-2.1-i2i", http=http, sleep=ctrl_c)
         self.assertEqual(http.calls[-1], ("http://c/interrupt", {"prompt_id": "p1"}))
 
 
@@ -191,12 +201,13 @@ class SweepTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "output" / "atl"
             out.mkdir(parents=True)
-            for name in ("room_001_window-1_00001_.png", "room_001_seam_00003_.png",
-                         "room_002_window-1_00001_.png", "room_001_window-1_00001_.png.txt"):
+            for name in ("room_001_a1-window-1_00001_.png", "room_001_a3-seam_00003_.png",
+                         "room_002_a1-window-1_00001_.png", "room_001_a1-window-1_00001_.png.txt"):
                 (out / name).touch()
             self.assertEqual(comfy_client.sweep_outputs("room_001", tmp), 2)
             self.assertEqual(sorted(p.name for p in out.iterdir()),
-                             ["room_001_window-1_00001_.png.txt", "room_002_window-1_00001_.png"])
+                             ["room_001_a1-window-1_00001_.png.txt",
+                              "room_002_a1-window-1_00001_.png"])
 
     def test_no_output_folder(self):
         with tempfile.TemporaryDirectory() as tmp:
