@@ -110,5 +110,89 @@ class WrapTests(unittest.TestCase):
         self.assertIsNone(rg.find_wrap(pixels, 400))
 
 
+class WindowPlanTests(unittest.TestCase):
+    def test_known_plans(self):
+        cases = {
+            (0, 320): [(0, 320)],
+            (0, 176): [(0, 176)],
+            (64, 240): [(64, 240)],
+            (0, 568): [(0, 320), (248, 568)],
+            (0, 840): [(0, 320), (168, 488), (344, 664), (520, 840)],
+            (0, 1280): [(0, 320), (240, 560), (480, 800), (720, 1040), (960, 1280)],
+        }
+        for (start, end), expected in cases.items():
+            with self.subTest(span=(start, end)):
+                self.assertEqual(spans(rg.plan_windows(start, end)), expected)
+
+    def test_rules_hold_for_every_corpus_width(self):
+        for end in range(328, 1288, 8):
+            with self.subTest(end=end):
+                windows = rg.plan_windows(0, end)
+                self.assertEqual((windows[0].x0, windows[-1].x1), (0, end))
+                for win in windows:
+                    self.assertLessEqual(win.width, rg.WINDOW_WIDTH)
+                    self.assertEqual(win.x0 % 8, 0)
+                for left, right in zip(windows, windows[1:]):
+                    self.assertGreaterEqual(left.x1 - right.x0, rg.WINDOW_OVERLAP)
+                    self.assertLess(left.x0, right.x0)
+
+
+class RoomPlanTests(unittest.TestCase):
+    def test_fixture_rooms(self):
+        one = rg.plan_room(fixture_room(1))
+        self.assertEqual((spans(one.windows), one.wrap, one.span), ([(0, 320)], None, (0, 320)))
+        two = rg.plan_room(fixture_room(2))
+        self.assertEqual(spans(two.windows), [(0, 320), (248, 568)])
+        wrap = rg.plan_room(fixture_room(3))
+        self.assertEqual((wrap.wrap, wrap.span, wrap.margins),
+                         (rg.Wrap(840, 224), (0, 840), rg.Margins(0, 88, 0, 0)))
+        self.assertEqual(len(wrap.windows), 4)
+
+    def test_margins_round_the_span_out_to_8_columns(self):
+        pixels = testkit.room_pixels(testkit.room(9, 320, 200))
+        pixels[:, :66], pixels[:, 239:] = 0, 0      # the labyrinth pieces' side margins
+        plan = rg.plan_room(testkit.indexed_image(pixels))
+        self.assertEqual((plan.margins.left, plan.margins.right), (66, 81))
+        self.assertEqual((plan.span, spans(plan.windows)), ((64, 240), [(64, 240)]))
+
+    def test_a_flat_room_has_nothing_to_render(self):
+        with self.assertRaisesRegex(ValueError, "set kind: skip"):
+            rg.plan_room(fixture_room(4))
+
+    def test_stitch_boundaries(self):
+        self.assertEqual(rg.stitch_boundaries(rg.plan_room(fixture_room(1))), [])
+        self.assertEqual(rg.stitch_boundaries(rg.plan_room(fixture_room(2))), [1136])
+        self.assertEqual(rg.stitch_boundaries(rg.plan_room(fixture_room(3))),
+                         [320, 976, 1664, 2368, 3040, 3360])
+
+
+@unittest.skipUnless((REAL_SRC / "manifest.json").is_file(),
+                     "the real atlantis-textures output is not present")
+class RealCorpusTests(unittest.TestCase):
+    """The measured facts the design rests on (spec section 4)."""
+
+    @classmethod
+    def setUpClass(cls):
+        source = source_tree.load(REAL_SRC)
+        cls.plans = {room.number: rg.plan_room(source_tree.open_indexed(REAL_SRC, room))
+                     for room in source.rooms if room.number not in SKIP_ROOMS}
+
+    def test_every_scene_and_insert_plans(self):
+        self.assertEqual(len(self.plans), 91)
+        for number, plan in self.plans.items():
+            with self.subTest(room=number):
+                for win in plan.windows:
+                    self.assertEqual(win.width % 8, 0)
+                    self.assertLessEqual(win.width, rg.WINDOW_WIDTH)
+
+    def test_only_room_58_wraps(self):
+        self.assertEqual({n: p.wrap for n, p in self.plans.items() if p.wrap},
+                         {58: rg.Wrap(840, 224)})
+        self.assertEqual(self.plans[58].margins, rg.Margins(0, 88, 28, 26))
+
+    def test_labyrinth_margins(self):
+        self.assertEqual((self.plans[85].margins.left, self.plans[85].span), (66, (64, 320)))
+
+
 if __name__ == "__main__":
     unittest.main()
