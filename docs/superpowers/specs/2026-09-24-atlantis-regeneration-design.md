@@ -214,7 +214,9 @@ Per room, deterministic:
    - **palette-aware smoothing**: each pixel becomes the mean of its 3x3
      neighbours whose colour lies within a distance threshold of it, so
      checkerboard dithering melts and edges survive;
-   - **median 3x3**.
+   - **gaussian**: a Gaussian blur of radius 1 at native size. (A 3x3 median
+     was the first choice and is ruled out: on a 50% checkerboard every pixel
+     is the majority of its own 3x3 neighbourhood, so the dither survives.)
 3. Upscale 4x with Lanczos.
 
 The guide is the reference image, the Canny input and the img2img start.
