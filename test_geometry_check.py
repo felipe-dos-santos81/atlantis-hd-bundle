@@ -61,8 +61,9 @@ class EdgeAgreementTests(unittest.TestCase):
         }
         for name, (source, render, op, expected) in cases.items():
             with self.subTest(name):
-                self.assertTrue(op(gc.edge_agreement(source, render), expected),
-                                f"{gc.edge_agreement(source, render)} {op.__name__} {expected}")
+                agreement = gc.edge_agreement(source, render)
+                self.assertTrue(op(agreement, expected),
+                                f"{agreement} {op.__name__} {expected}")
 
     def test_a_render_edge_counts_down_to_the_render_threshold(self):
         # Regression: resampling weakened room 95's marginal sea edges under the one shared
@@ -90,7 +91,8 @@ class SeamRatioTests(unittest.TestCase):
         }
         for name, (image, boundary, op, expected) in cases.items():
             with self.subTest(name):
-                self.assertTrue(op(gc.seam_ratio(image, boundary), expected))
+                ratio = gc.seam_ratio(image, boundary)
+                self.assertTrue(op(ratio, expected), f"{ratio} {op.__name__} {expected}")
 
 
 class CheckTests(unittest.TestCase):
@@ -104,7 +106,7 @@ class CheckTests(unittest.TestCase):
             self.assertTrue(result.passed, result.issues)
             self.assertEqual((len(result.window_shifts), len(result.seam_ratios)), (2, 1))
             json.dumps(result.as_dict())
-        with self.subTest("a window too sparse to judge"):
+        with self.subTest("a window too sparse to judge passes"):
             arr = np.asarray(self.source).copy()
             arr[:, :72] = 0                            # window 1 is black ...
             arr[8:16, 16:24] = 255                     # ... but for a square under MIN_WINDOW_EDGES
