@@ -128,9 +128,10 @@ and leaves it alone. Fix its caption, then run `make batch room=N force=1`. A
 failed attempt (a ComfyUI error, a timeout, Ctrl-C) has no record and never
 counts: batch retries that room on every run and exits 1.
 
-To restart a room from scratch, delete `data/rooms-ai/.quality/room_NNN/`,
-then run `make batch room=N force=1`. A `reviews.yaml` entry for an attempt
-later than the audit folder's latest is stale and ignored.
+To restart a room from scratch, delete `data/rooms-ai/.quality/room_NNN/`
+**and** its entry in `reviews.yaml`, then run `make batch room=N force=1`. A
+leftover review entry becomes current again once the new attempts reach its
+attempt number, so deleting only the folder is not enough.
 
 ## Outputs and the audit folder
 
