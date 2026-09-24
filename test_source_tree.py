@@ -25,7 +25,7 @@ class SourceTreeTests(unittest.TestCase):
         self.assertEqual(room.rel, Path("indexed/rooms/room_003.png"))
         testkit.rewrite_manifest(self.src, lambda assets: assets.append(
             {"room": 9, "role": "object", "file": "nope.png"}))
-        self.assertEqual(len(source_tree.load(self.src).rooms), 4)
+        self.assertEqual(len(source_tree.load(self.src).rooms), 4, msg="ignores other roles")
 
     def test_refuses_a_manifest_that_disagrees_with_its_files(self):
         def edit(field, value, index=0):
