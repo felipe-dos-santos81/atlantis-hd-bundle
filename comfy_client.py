@@ -69,7 +69,7 @@ WORKFLOWS = {
         node_classes=("TextEncodeQwenImage21",) + MASK_CLASSES,
         reference="<image1>"),
 }
-DEFAULT_WORKFLOW = "qwen-edit-2511-canny"   # the spike (plan Task 18) confirms or replaces it
+DEFAULT_WORKFLOW = "qwen-image-2.1-i2i"   # chosen by the spike on 2026-09-24: 2511 drifts ~1 native px
 REFERENCES = ("guide", "composite")
 
 

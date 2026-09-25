@@ -118,7 +118,7 @@ Node ids in `recreation_qwen21_i2i.json`: 1 LoadImage (the guide window),
 5 UNETLoader (2.1 bf16), 6 VAELoader, 7 DifferentialDiffusion,
 9 TextEncodeQwenImage21 (prompt, negative_prompt, resolution 0,
 `images.image_1` is the reference), 11 VAEEncode (the composite),
-12 SetLatentNoiseMask, 13 KSampler (40 steps, cfg 1.0, denoise 0.6),
+12 SetLatentNoiseMask, 13 KSampler (40 steps, cfg 1.0, denoise 0.9),
 14 VAEDecode, 15 SaveImage.
 
 The 2.1 encoder's reference slot is an autogrow input and must be addressed
@@ -216,20 +216,49 @@ Seed 42, match strength 0.5:
   second window continues the first one's painting across the overlap
   (native columns 248–320) with no visible join.
 
-The spike weighs the 2511 drift (its ControlNet strength, `REFERENCE`,
-`MAX_SHIFT`) against the 2.1 fidelity (its denoise).
+**Spike (2026-09-24, GB10).** Rooms 1, 29, 47, 52, 58, 85 and 95, seed 42,
+match strength 0.5, vLLM stopped; the lowest MemAvailable while rendering was
+71.9 GB. Shift is the worst over the room and its windows, in native px; edge
+is the lowest room or window agreement.
 
-Task 18 records the spike's decisions (the default workflow and its
-strength or denoise, the de-dither method, `REFERENCE`,
-`WINDOW_WIDTH`/`WINDOW_OVERLAP`, `MIN_EDGE_AGREEMENT`, the colour-match
-strength) with their evidence.
+| Variant | Rooms | s a window | Promoted | Worst shift | Lowest edge |
+|---|---|---|---|---|---|
+| `qwen-edit-2511-canny`, strength 0.7 | all | 245–290 | 29, 47 | 1.0 (58's window 2: 2.1) | 0.88 (room 1); room 95 0.05 |
+| `qwen-edit-2511-canny`, strength 0.9 | all | 247–293 | 29, 47 | 1.0 (58's window 2: 2.0) | 0.89 (room 1); room 95 0.05 |
+| `qwen-image-2.1-i2i`, denoise 0.6 | all | 39–57 | all | 0.01 | 1.00 |
+| `qwen-image-2.1-i2i`, denoise 0.75 | all | 39–55 | all | 0.02 | 1.00 |
+| `qwen-image-2.1-i2i`, denoise 0.9 (chosen) | all | 39–55 | all | 0.06 | 0.999 |
+| 2.1 0.9, `DEDITHER_METHOD = "gaussian"` | 1, 52, 85 | 39–55 | all | 0.34 (room 52) | 1.00 |
+| 2.1 0.9, `REFERENCE = "composite"` | 29, 58 | 39–42 | all | 0.04 | 0.999 |
+| 2.1 0.9, `WINDOW_WIDTH = 256` | 29, 58 | 32–33 | all | 0.06 | 0.999 |
 
-- Include room 95 in the spike. It is the corpus's weakest-edge room: a
-  320x200 all-texture sea whose 122 strong source edge pixels nearly all sit
-  just over `EDGE_THRESHOLD` (98% between 80 and 110). Its own guide agreed
-  0.27 before `RENDER_EDGE_THRESHOLD`, 0.64 with a render threshold of 75,
-  0.96 at 70 and 1.0 at 60. A good render of it must stay promotable.
-- The spike calibrates `RENDER_EDGE_THRESHOLD` alongside `MIN_EDGE_AGREEMENT`.
-  Lower is more tolerant of resampling and less of a gate: one window blurred
-  with radius 8 at 4x was caught in 20 of the 33 multi-window rooms at 60,
-  but in 3 at 40.
+- 2511 repaints in the painted HD look but drifts about 1 native px in rooms
+  1, 52, 58 and 85 at either strength, and invents: room 1's door loses its
+  glass and gains light shafts and a tool, and room 95's waves are replaced
+  (edge 0.05; its +31, +16 px shift is phase correlation misreading the
+  texture). The ControlNet strength does not move the drift.
+- 2.1 holds the geometry at every denoise but stays close to the guide: its
+  raw stitches differ from the Lanczos guide by 2–4 levels (mean absolute)
+  against 2511's 6–15, and at 0.9 a window with an all-white mask moves 3.8
+  levels from its composite. The reference image (`images.image_1`, the
+  guide) pins the output more than the denoise does.
+
+Decisions, picked by the user from the sheets:
+- `DEFAULT_WORKFLOW = "qwen-image-2.1-i2i"` at denoise 0.9: the only family
+  that passes the gate, at the denoise that moves furthest from the guide.
+- `DEDITHER_METHOD` stays `"palette-smooth"`: gaussian is softer and loses
+  fine detail such as room 52's cracks.
+- `REFERENCE` stays `"guide"`: the composite reference looked the same on
+  rooms 29 and 58.
+- `WINDOW_WIDTH` stays 320: 256 is about 20% faster a window but takes more
+  windows and invented a small object in room 29.
+- `DEFAULT_MATCH_STRENGTH` stays 0.5.
+- `RENDER_EDGE_THRESHOLD` stays 60. Every spike render re-checked at 40, 60
+  and 75: every 2.1 render agrees 0.99 or more at 40 and 60, but room 95's
+  drop to 0.73–0.87 at 75. 40 gains nothing here and is less of a gate: one
+  window blurred with radius 8 at 4x was caught in 20 of the 33 multi-window
+  rooms at 60, but in 3 at 40.
+- `MIN_EDGE_AGREEMENT` stays 0.80. Edge agreement does not separate good from
+  bad: 2511's drifting renders agree 0.88–0.99 (0.05 only on room 95), and
+  its promoted rooms 29 and 47 agree 1.00 like the 2.1 renders. The shift
+  gate catches the drift.

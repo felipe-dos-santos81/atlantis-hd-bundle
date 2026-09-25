@@ -4,9 +4,9 @@ Regenerates the 96 room backgrounds of *Indiana Jones and the Fate of
 Atlantis* (LucasArts, 1992) as painted high-definition art at exactly 4x
 their native size, with local models:
 
-- ComfyUI running one of two render workflows, chosen per run: Qwen-Image-Edit
-  2511 with the InstantX Canny ControlNet (`qwen-edit-2511-canny`, the
-  default), or Qwen-Image 2.1 img2img (`qwen-image-2.1-i2i`).
+- ComfyUI running one of two render workflows, chosen per run: Qwen-Image 2.1
+  img2img (`qwen-image-2.1-i2i`, the default), or Qwen-Image-Edit 2511 with
+  the InstantX Canny ControlNet (`qwen-edit-2511-canny`).
 - vLLM serving `Qwen/Qwen3.8-27B`, which captions each room before rendering
   and reviews each render afterwards.
 
