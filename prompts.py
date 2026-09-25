@@ -1,15 +1,14 @@
 """Prompts and VLM requests: the caption question, the painted render prompt,
 the review question and its parser.
 
-Knows no files or make targets: the driver hands it images (paths or Pillow
-images) and text. The VLM plumbing (_image, _ask, parse_review,
+Knows no files or make targets: the driver hands it Pillow images and text.
+The VLM plumbing (_image, _ask, parse_review,
 vlm_is_serving) comes from the AITD kit's recreation_quality.py.
 """
 import base64
 import io
 import json
 import re
-from pathlib import Path
 
 from PIL import Image
 
@@ -116,14 +115,10 @@ def render_prompt(caption, kind, corrections=(), note="", reference=DEFAULT_REFE
 
 
 def _image(image):
-    """An OpenAI image_url content part for a path or Pillow image, scaled so its
+    """An OpenAI image_url content part for a Pillow image, scaled so its
     longer side is VLM_MAX_SIDE: nearest-neighbour when enlarging, so the pixel
     edges stay visible, Lanczos when shrinking."""
-    if isinstance(image, (str, Path)):
-        with Image.open(image) as im:
-            im = im.convert("RGB")
-    else:
-        im = image.convert("RGB")
+    im = image.convert("RGB")
     ratio = VLM_MAX_SIDE / max(im.size)
     if ratio != 1:
         im = im.resize((max(1, round(im.width * ratio)), max(1, round(im.height * ratio))),

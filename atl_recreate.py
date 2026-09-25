@@ -79,7 +79,7 @@ def fail(msg):
 def write_atomic(path, text):
     """Write `text` to `path` through <path>.tmp and a rename."""
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(text)
+    tmp.write_text(text, encoding="utf-8")
     os.replace(tmp, path)
 
 
@@ -120,7 +120,7 @@ def latest_attempt(audit):
 def read_record(audit, attempt):
     """attempt-N.json as a mapping, or None when it is missing or unreadable."""
     try:
-        value = json.loads((audit / f"attempt-{attempt}.json").read_text())
+        value = json.loads((audit / f"attempt-{attempt}.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     return value if isinstance(value, dict) else None
@@ -201,8 +201,9 @@ def caption_images(src, room):
 def cmd_caption(args):
     rooms = selection(args)
     entries = load_entries(args)
-    if not vlm_is_serving(VLM_BASE_URL, VLM_MODEL, comfy_client.http_json, VLM_API_KEY):
-        return fail(f"vLLM is not serving {VLM_MODEL} at {VLM_BASE_URL} - start it first")
+    code = vlm_preflight()
+    if code is not None:
+        return code
     done = skipped = failed = 0
     for i, room in enumerate(rooms, 1):
         entry = entries[room.key]
@@ -351,6 +352,21 @@ def memory_available_gb(meminfo=Path("/proc/meminfo")):
         if line.startswith("MemAvailable:"):
             return int(line.split()[1]) / 2 ** 20
     raise RuntimeError(f"MemAvailable not found in {meminfo}")
+
+
+def vlm_preflight():
+    """None when vLLM serves VLM_MODEL; else fail(...)'s exit code."""
+    if not vlm_is_serving(VLM_BASE_URL, VLM_MODEL, comfy_client.http_json, VLM_API_KEY):
+        return fail(f"vLLM is not serving {VLM_MODEL} at {VLM_BASE_URL} - start it first")
+    return None
+
+
+def free_comfy_models():
+    """Ask ComfyUI to unload its models; a warning, never an error, when it cannot."""
+    try:
+        comfy_client.free_models(COMFY_URL)
+    except Exception as error:
+        print(f"warning: failed to free ComfyUI's models: {error}", file=sys.stderr)
 
 
 def comfy_preflight(workflow, no_memory_check):
@@ -552,10 +568,7 @@ def cmd_batch(args):
               f"copied={len(copies)} done={done} stuck={len(stuck)}")
         return 1 if failed or stuck else 0
     finally:
-        try:
-            comfy_client.free_models(COMFY_URL)
-        except Exception as error:
-            print(f"warning: failed to free ComfyUI's models: {error}", file=sys.stderr)
+        free_comfy_models()
 
 
 # ---- review -----------------------------------------------------------------
@@ -577,12 +590,10 @@ def review_images(src, room, output):
 def cmd_review(args):
     rooms = selection(args)
     entries = load_entries(args)
-    if not vlm_is_serving(VLM_BASE_URL, VLM_MODEL, comfy_client.http_json, VLM_API_KEY):
-        return fail(f"vLLM is not serving {VLM_MODEL} at {VLM_BASE_URL} - start it first")
-    try:
-        comfy_client.free_models(COMFY_URL)     # give the VLM room; ComfyUI may be down
-    except Exception as error:
-        print(f"warning: failed to free ComfyUI's models: {error}", file=sys.stderr)
+    code = vlm_preflight()
+    if code is not None:
+        return code
+    free_comfy_models()     # give the VLM room; ComfyUI may be down
     reviews = load_reviews(args.reviews, optional=True)
     accepted = rejected = skipped = failed = 0
     for i, room in enumerate(rooms, 1):

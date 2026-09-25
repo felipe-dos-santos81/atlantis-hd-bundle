@@ -1,9 +1,7 @@
 import base64
 import io
 import json
-import tempfile
 import unittest
-from pathlib import Path
 
 from PIL import Image
 
@@ -91,11 +89,9 @@ class RequestTests(unittest.TestCase):
                                "m", "")
 
     def test_images_are_scaled_to_the_longer_side(self):
-        self.assertEqual(decoded_size(p._image(Image.new("RGB", (320, 144)))), (1280, 576))
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "room.png"
-            Image.new("RGB", (2560, 400)).save(path)
-            self.assertEqual(decoded_size(p._image(path)), (1280, 200))
+        for size, expected in (((320, 144), (1280, 576)), ((2560, 400), (1280, 200))):
+            with self.subTest(size=size):
+                self.assertEqual(decoded_size(p._image(Image.new("RGB", size))), expected)
 
     def test_review_sends_pairs_then_the_overview(self):
         vlm = FakeVLM('{"accepted": false, "issues": ["window 2: the awning moved; move it back"]}')

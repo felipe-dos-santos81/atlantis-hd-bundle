@@ -11,7 +11,8 @@ from dataclasses import dataclass
 import numpy as np
 from PIL import Image, ImageFilter
 
-SCALE = 4
+from source_tree import SCALE
+
 WINDOW_WIDTH = 320          # Wt: the widest window, native columns (the spike tunes it)
 WINDOW_OVERLAP = 64         # Ov: the least overlap between neighbouring windows
 DEDITHER_METHODS = ("palette-smooth", "gaussian")
@@ -33,11 +34,11 @@ def to_rgb(indexed):
     return indexed.convert("RGB")
 
 
-def dedither(rgb, method=DEDITHER_METHOD, threshold=DEDITHER_THRESHOLD):
+def dedither(rgb, method=DEDITHER_METHOD):
     """`rgb` with its dithering smoothed away, at its own size.
 
     palette-smooth: each pixel becomes the mean of itself and those of its 3x3
-    neighbours within `threshold` RGB distance of it, so a checkerboard of near
+    neighbours within DEDITHER_THRESHOLD RGB distance of it, so a checkerboard of near
     colours melts while an edge between distant colours stays sharp.
     gaussian: a Gaussian blur of radius 1. (A 3x3 median is no candidate: on a
     50% checkerboard each pixel is its neighbourhood's majority.)
@@ -55,7 +56,7 @@ def dedither(rgb, method=DEDITHER_METHOD, threshold=DEDITHER_THRESHOLD):
     for dy in range(3):
         for dx in range(3):
             n = padded[dy:dy + h, dx:dx + w]
-            near = np.sqrt(((n - a) ** 2).sum(axis=2, keepdims=True)) <= threshold
+            near = np.sqrt(((n - a) ** 2).sum(axis=2, keepdims=True)) <= DEDITHER_THRESHOLD
             near = near.astype(np.float32)
             total += n * near
             count += near
@@ -139,10 +140,11 @@ class Window:
         return self.x1 - self.x0
 
 
-def plan_windows(start, end, width=WINDOW_WIDTH, overlap=WINDOW_OVERLAP):
-    """Windows over columns [start, end): at most `width` wide, neighbours
-    overlapping by at least `overlap`, each start `start` plus a multiple of 8,
-    the first at `start` and the last flush with `end`."""
+def plan_windows(start, end):
+    """Windows over columns [start, end): at most WINDOW_WIDTH wide, neighbours
+    overlapping by at least WINDOW_OVERLAP, each start `start` plus a multiple
+    of 8, the first at `start` and the last flush with `end`."""
+    width, overlap = WINDOW_WIDTH, WINDOW_OVERLAP
     span = end - start
     if span <= width:
         return (Window(start, end),)
@@ -157,15 +159,13 @@ def plan_windows(start, end, width=WINDOW_WIDTH, overlap=WINDOW_OVERLAP):
 
 @dataclass(frozen=True)
 class RoomPlan:
-    width: int              # the room's native size
-    height: int
     margins: Margins
     wrap: Wrap | None
     span: tuple             # (start, end): the native columns the windows cover
     windows: tuple          # of Window, left to right
 
 
-def plan_room(indexed, width=WINDOW_WIDTH, overlap=WINDOW_OVERLAP):
+def plan_room(indexed):
     """Margins, wraparound and windows of one room.
 
     The span skips whole-column margins, rounded out to 8 columns so every
@@ -173,21 +173,21 @@ def plan_room(indexed, width=WINDOW_WIDTH, overlap=WINDOW_OVERLAP):
     period. Raises ValueError for a room with nothing to render.
     """
     pixels = indices(indexed)
-    h, w = pixels.shape
+    w = pixels.shape[1]
     margins = blank_margins(pixels)
     if margins.left >= w:
         raise ValueError("the room is one flat colour: nothing to render (set kind: skip)")
     content_end = w - margins.right
     wrap = find_wrap(pixels, content_end)
-    if wrap and wrap.period < width:
+    if wrap and wrap.period < WINDOW_WIDTH:
         raise ValueError(f"the wraparound period {wrap.period} is narrower than one "
-                         f"window ({width}); lower WINDOW_WIDTH")
+                         f"window ({WINDOW_WIDTH}); lower WINDOW_WIDTH")
     start = 8 * (margins.left // 8)
     end = wrap.period if wrap else min(w, 8 * math.ceil(content_end / 8))
-    windows = plan_windows(start, end, width, overlap)
+    windows = plan_windows(start, end)
     if any(win.width % 8 for win in windows):
         raise ValueError(f"window widths must be multiples of 8 native columns: {windows}")
-    return RoomPlan(w, h, margins, wrap, (start, end), windows)
+    return RoomPlan(margins, wrap, (start, end), windows)
 
 
 def stitch_from(window, previous):
@@ -196,11 +196,11 @@ def stitch_from(window, previous):
     return window.x0 if previous is None else window.x0 + (previous.x1 - window.x0) // 2
 
 
-def stitch_boundaries(plan, width=WINDOW_WIDTH):
+def stitch_boundaries(plan):
     """The 4x columns where the stitched image switches from one render to another."""
     xs = {stitch_from(win, prev) * SCALE for prev, win in zip(plan.windows, plan.windows[1:])}
     if plan.wrap:
-        q, period = width // 4, plan.wrap.period
+        q, period = WINDOW_WIDTH // 4, plan.wrap.period
         xs |= {(period - q) * SCALE, q * SCALE, period * SCALE}
     return sorted(xs)
 
@@ -257,22 +257,24 @@ def _rolled(image, period, half):
     return strip
 
 
-def seam_inputs(guide, canvas, plan, width=WINDOW_WIDTH):
+def seam_inputs(guide, canvas, plan):
     """(guide strip, composite, mask) for the seam window across a wraparound's join.
 
-    The strip is the span's last width/2 columns followed by its first width/2.
+    The strip is the span's last WINDOW_WIDTH/2 columns followed by its first
+    WINDOW_WIDTH/2.
     The mask holds the outer quarters, ramps across the next eighths and paints
     the middle quarter fully.
     """
+    width = WINDOW_WIDTH
     period, half, q, e = plan.wrap.period, width // 2, width // 4, width // 8
     up = _mask_row(width * SCALE, q * SCALE, (q + e) * SCALE)
     row = np.minimum(up, up[::-1])
     return _rolled(guide, period, half), _rolled(canvas, period, half), _mask(row, guide.height)
 
 
-def apply_seam(canvas, plan, rendered, width=WINDOW_WIDTH):
+def apply_seam(canvas, plan, rendered):
     """Write the seam render's middle half back to both ends of `canvas`."""
-    period, half, q = plan.wrap.period, width // 2, width // 4
+    period, half, q = plan.wrap.period, WINDOW_WIDTH // 2, WINDOW_WIDTH // 4
     h = canvas.height
     canvas.paste(rendered.crop((q * SCALE, 0, half * SCALE, h)), ((period - q) * SCALE, 0))
     canvas.paste(rendered.crop((half * SCALE, 0, (half + q) * SCALE, h)), (0, 0))
@@ -289,7 +291,7 @@ def apply_fixups(image, plan, indexed):
     m = plan.margins
     if m.left or m.right or m.top or m.bottom:
         flat = to_rgb(indexed).resize(out.size, Image.Resampling.NEAREST)
-        w, rows = plan.width, plan.height
+        w, rows = indexed.width, indexed.height
         for x0, y0, x1, y1 in ((0, 0, m.left, rows), (w - m.right, 0, w, rows),
                                (0, 0, w, m.top), (0, rows - m.bottom, w, rows)):
             if x1 > x0 and y1 > y0:

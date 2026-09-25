@@ -6,6 +6,7 @@ import numpy as np
 from PIL import Image
 
 import geometry_check as gc
+import testkit
 
 
 def blocks(width, height, seed=0, size=8):
@@ -16,12 +17,6 @@ def blocks(width, height, seed=0, size=8):
 
 def up(image):
     return image.resize((image.width * 4, image.height * 4), Image.Resampling.NEAREST)
-
-
-def shifted(image, dx):
-    out = Image.new("RGB", image.size)
-    out.paste(image, (dx, 0))
-    return out
 
 
 class PhaseShiftTests(unittest.TestCase):
@@ -121,12 +116,12 @@ class CheckTests(unittest.TestCase):
 
     def test_check_flags_a_shift(self):
         with self.subTest("whole room"):
-            result = gc.check(shifted(up(self.source), 8), self.source)
+            result = gc.check(testkit.shift_right(up(self.source)), self.source)
             self.assertFalse(result.passed)
             self.assertIn("the room is shifted +2.0", result.issues[0])
         with self.subTest("one window"):
             render = up(self.source)
-            render.paste(shifted(render.crop((256, 0, 512, 256)), 8), (256, 0))
+            render.paste(testkit.shift_right(render.crop((256, 0, 512, 256))), (256, 0))
             result = gc.check(render, self.source, windows=[(0, 64), (64, 128)])
             self.assertTrue(any("window 2 is shifted" in issue for issue in result.issues),
                             result.issues)
