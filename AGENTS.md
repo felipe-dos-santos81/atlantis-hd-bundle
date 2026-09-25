@@ -232,7 +232,7 @@ is the lowest room or window agreement.
 | 2.1 0.9, `REFERENCE = "composite"` | 29, 58 | 39–42 | all | 0.04 | 0.999 |
 | 2.1 0.9, `WINDOW_WIDTH = 256` | 29, 58 | 32–33 | all | 0.06 | 0.999 |
 
-- 2511 repaints in the painted HD look but drifts about 1 native px in rooms
+- 2511 repaints in the painted HD look but drifts 0.4–2 native px in rooms
   1, 52, 58 and 85 at either strength, and invents: room 1's door loses its
   glass and gains light shafts and a tool, and room 95's waves are replaced
   (edge 0.05; its +31, +16 px shift is phase correlation misreading the
@@ -243,7 +243,8 @@ is the lowest room or window agreement.
   levels from its composite. The reference image (`images.image_1`, the
   guide) pins the output more than the denoise does.
 
-Decisions, picked by the user from the sheets:
+Decisions: the user picked the first six from the sheets; the last follows
+from the calibration.
 - `DEFAULT_WORKFLOW = "qwen-image-2.1-i2i"` at denoise 0.9: the only family
   that passes the gate, at the denoise that moves furthest from the guide.
 - `DEDITHER_METHOD` stays `"palette-smooth"`: gaussian is softer and loses
