@@ -70,6 +70,15 @@ class TemplateTests(unittest.TestCase):
                         if isinstance(value, list) and len(value) == 2 and isinstance(value[0], str):
                             self.assertIn(value[0], prompt, f"node {node_id} links to {value[0]}")
 
+    def test_a_fallback_is_its_template_with_its_settings(self):
+        full = comfy_client.WORKFLOWS["qwen-image-2.1-i2i"]
+        faithful = comfy_client.WORKFLOWS[full.fallback]
+        self.assertEqual(comfy_client.load_template(full)["13"]["inputs"]["denoise"], 1.0)
+        expected = comfy_client.load_template(full)
+        expected["13"]["inputs"]["denoise"] = 0.9
+        self.assertEqual(comfy_client.load_template(faithful), expected)
+        self.assertIsNone(faithful.fallback, msg="a fallback has no fallback of its own")
+
     def test_2511_controlnet_reads_canny_of_the_guide(self):
         wf = comfy_client.WORKFLOWS["qwen-edit-2511-canny"]
         prompt = comfy_client.load_template(wf)

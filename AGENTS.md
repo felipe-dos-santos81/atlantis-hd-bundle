@@ -48,11 +48,13 @@ Rules that must survive any change:
   latest judged attempt (one with a record) was rejected and it has
   `MAX_ATTEMPTS` judged attempts; failed attempts never count, so a room that
   keeps failing on infrastructure is retried on every batch (exit code 1). A
-  failed attempt keeps its number and its tiles. The next attempt's
-  corrections (`corrections_for`) are the current review's issues while no
-  later attempt was promoted, whatever the attempts since became; a
-  geometry rejection gives the one `prompts.GEOMETRY_CORRECTION` sentence
-  instead of the gate's strings. A review of an attempt later than the audit
+  stuck room whose workflow names a `fallback` (`fallback_for`) is rendered
+  once more through it on the next batch, and reported STUCK only once that
+  attempt is rejected too. A failed attempt keeps its number and its tiles.
+  The next attempt's corrections (`corrections_for`) are the current review's
+  issues while no later attempt was promoted, whatever the attempts since
+  became; a geometry rejection gives the one `prompts.GEOMETRY_CORRECTION`
+  sentence instead of the gate's strings. A review of an attempt later than the audit
   folder's latest is stale (`current_review`) and ignored.
 - **Renders never depend on other rooms.** A room is consistent within itself
   through the window continuation, and with other rooms through each room's
@@ -118,8 +120,9 @@ Node ids in `recreation_qwen21_i2i.json`: 1 LoadImage (the guide window),
 5 UNETLoader (2.1 bf16), 6 VAELoader, 7 DifferentialDiffusion,
 9 TextEncodeQwenImage21 (prompt, negative_prompt, resolution 0,
 `images.image_1` is the reference), 11 VAEEncode (the composite),
-12 SetLatentNoiseMask, 13 KSampler (40 steps, cfg 1.0, denoise 0.9),
-14 VAEDecode, 15 SaveImage.
+12 SetLatentNoiseMask, 13 KSampler (40 steps, cfg 1.0, denoise 1.0),
+14 VAEDecode, 15 SaveImage. Its fallback, `qwen-image-2.1-i2i-faithful`, is
+the same graph with the registry's `settings` writing denoise 0.9 into node 13.
 
 The 2.1 encoder's reference slot is an autogrow input and must be addressed
 as `images.image_1`: the AITD kit's live render showed the flat `image_1`
@@ -245,8 +248,9 @@ is the lowest room or window agreement.
 
 Decisions: the user picked the first six from the sheets; the last follows
 from the calibration.
-- `DEFAULT_WORKFLOW = "qwen-image-2.1-i2i"` at denoise 0.9: the only family
-  that passes the gate, at the denoise that moves furthest from the guide.
+- `DEFAULT_WORKFLOW = "qwen-image-2.1-i2i"`: the only family that passes the
+  gate. Its denoise went from 0.9 to 1.0 after the look probes below, with
+  0.9 as the stuck rooms' fallback.
 - `DEDITHER_METHOD` stays `"palette-smooth"`: gaussian is softer and loses
   fine detail such as room 52's cracks.
 - `REFERENCE` stays `"guide"`: the composite reference looked the same on
@@ -263,3 +267,17 @@ from the calibration.
   bad: 2511's drifting renders agree 0.88–0.99 (0.05 only on room 95), and
   its promoted rooms 29 and 47 agree 1.00 like the 2.1 renders. The shift
   gate catches the drift.
+
+**Look probes (2026-09-25, GB10).** The same rooms and settings, 2.1 only:
+
+| Variant | Promoted | s a window | Look |
+|---|---|---|---|
+| denoise 0.95 | all | 37–55 | the same soft upscale as 0.9 |
+| denoise 1.0 | 1, 47, 85, 95 | 40–59 | painted HD; room 1 a faithful repaint (edge 0.99) |
+| denoise 0.9, no reference image | none | 33–47 | painted, layout lost: shifts up to 92 px, edge 0.04–0.97 |
+
+At 1.0, room 29's second window invented a flower stall and a gate (edge
+0.74), room 52 shifted 0.9 px and room 58 3.1 px; the gate caught each. The
+look changes all at once between 0.95 and 1.0, and without the reference
+image nothing holds the layout, even at 0.9. The user chose denoise 1.0, with retries on new seeds and one
+attempt at 0.9 for a room still rejected after `MAX_ATTEMPTS`.

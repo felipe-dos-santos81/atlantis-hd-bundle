@@ -471,6 +471,17 @@ def plan_line(args, room, entry, corrections):
     return line + ("  " + "; ".join(extras) if extras else "")
 
 
+def fallback_for(args, room, workflow):
+    """The workflow to render a stuck room through once more: `workflow`'s
+    fallback while no judged attempt of the room has used it; else None."""
+    if workflow.fallback is None:
+        return None
+    audit = audit_dir(args.dst, room)
+    used = {record.get("workflow") for n in range(1, latest_attempt(audit) + 1)
+            if (record := read_record(audit, n)) is not None}
+    return None if workflow.fallback in used else comfy_client.WORKFLOWS[workflow.fallback]
+
+
 def stuck_line(room):
     return (f"  STUCK   {room.key}: rejected {MAX_ATTEMPTS} times - fix its caption in "
             f"rooms.yaml, then: make batch room={room.number} force=1")
@@ -495,10 +506,13 @@ def cmd_batch(args):
         if not args.force and status == "done":
             done += 1
             continue
+        room_workflow = workflow
         if not args.force and status == "stuck":
-            stuck.append(room)
-            continue
-        todo = (room, entry, corrections_for(args, room, reviews))
+            room_workflow = fallback_for(args, room, workflow)
+            if room_workflow is None:
+                stuck.append(room)
+                continue
+        todo = (room, entry, corrections_for(args, room, reviews), room_workflow)
         if entry.caption.strip():
             work.append(todo)
         else:
@@ -511,16 +525,17 @@ def cmd_batch(args):
         for room in copies:
             w, h = room.out_size
             print(f"  copy    {room.key} skip   -> {w}x{h} nearest")
-        for room, entry, corrections in work + uncaptioned:
+        for room, entry, corrections, room_workflow in work + uncaptioned:
+            note = f"  (fallback: {room_workflow.name})" if room_workflow is not workflow else ""
             try:
-                print(plan_line(args, room, entry, corrections))
+                print(plan_line(args, room, entry, corrections) + note)
             except ValueError as error:
                 print(f"  ERROR   {room.key}: {error}")
         for room in stuck:
             print(stuck_line(room))
         return 0
     if uncaptioned:
-        keys = [room.key for room, _, _ in uncaptioned]
+        keys = [room.key for room, *_ in uncaptioned]
         return fail(f"{len(keys)} selected room(s) have no caption in {args.rooms_file} "
                     "- run: make caption\n  " + "\n  ".join(keys))
     for room in copies:
@@ -531,18 +546,21 @@ def cmd_batch(args):
             print(stuck_line(room), file=sys.stderr)
         return 1 if stuck else 0
 
-    code = comfy_preflight(workflow, args.no_memory_check)
-    if code is not None:
-        return code
+    for needed in dict.fromkeys(room_workflow for *_, room_workflow in work):
+        code = comfy_preflight(needed, args.no_memory_check)
+        if code is not None:
+            return code
     # ComfyUI keeps its models loaded after rendering (~40 GB); free them on the
     # way out, even after a failure, so vLLM has room to start for `make review`.
     try:
         promoted = rejected = failed = 0
-        for i, (room, entry, corrections) in enumerate(work, 1):
+        for i, (room, entry, corrections, room_workflow) in enumerate(work, 1):
             note = f" with {len(corrections)} correction(s)" if corrections else ""
+            if room_workflow is not workflow:
+                note += f" through the fallback {room_workflow.name}"
             print(f"[{i}/{len(work)}] render {room.key} ({entry.kind}){note}", flush=True)
             try:
-                attempt, result = render_room(args, workflow, room, entry, corrections)
+                attempt, result = render_room(args, room_workflow, room, entry, corrections)
             except KeyboardInterrupt:
                 comfy_client.sweep_outputs(room.key, COMFY_DIR)
                 raise
@@ -561,7 +579,12 @@ def cmd_batch(args):
             save_reviews(args.reviews, reviews)
             print(f"  rejected attempt {attempt}: " + "; ".join(result.issues), flush=True)
             if room_status(args, room, reviews)[0] == "stuck":
-                stuck.append(room)
+                fallback = fallback_for(args, room, workflow)
+                if fallback is None:
+                    stuck.append(room)
+                else:
+                    print(f"  next batch renders it through the fallback {fallback.name}",
+                          flush=True)
         for room in stuck:
             print(stuck_line(room), file=sys.stderr)
         print(f"done: promoted={promoted} rejected={rejected} failed={failed} "

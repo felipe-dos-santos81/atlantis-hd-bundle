@@ -9,6 +9,8 @@ workflow, the template file and where the driver's values go:
   reference_inputs  the encoder inputs that receive the reference image, which
               the driver points at the guide or the composite
   positive, negative, seed, save  as named
+  settings    graph values this workflow overrides in its template
+  fallback    the workflow batch renders a stuck room through once more
 The HTTP plumbing (http_json, is_up, free_models, missing_model_files,
 missing_nodes, wait_history, stage_input, execute, output_path) comes from the
 AITD kit's comfy_client.py.
@@ -36,9 +38,11 @@ REPO_DIR = Path(__file__).resolve().parent
 # model_files: (models subfolder, node id, input key) ComfyUI must have on disk
 # node_classes: class_type values the ComfyUI build must know
 # reference:   how the positive prompt names the window
+# settings:    ((node id, input key), value) pairs written over the template's values
+# fallback:    registry key of the workflow for a room this one left stuck, or None
 Workflow = namedtuple("Workflow", "name template guide composite mask reference_inputs "
                                   "positive negative seed save model_files node_classes "
-                                  "reference")
+                                  "reference settings fallback", defaults=((), None))
 
 MASK_CLASSES = ("LoadImageMask", "SetLatentNoiseMask", "DifferentialDiffusion")
 
@@ -67,18 +71,26 @@ WORKFLOWS = {
                      ("text_encoders", "4", "clip_name"),
                      ("vae", "6", "vae_name")),
         node_classes=("TextEncodeQwenImage21",) + MASK_CLASSES,
-        reference="<image1>"),
+        reference="<image1>", fallback="qwen-image-2.1-i2i-faithful"),
 }
+# The same graph below full denoise: a clean repaint that keeps to the guide, for
+# the rooms whose full repaint the gate or the review rejected MAX_ATTEMPTS times.
+WORKFLOWS["qwen-image-2.1-i2i-faithful"] = WORKFLOWS["qwen-image-2.1-i2i"]._replace(
+    name="qwen-image-2.1-i2i-faithful", settings=((("13", "denoise"), 0.9),), fallback=None)
 DEFAULT_WORKFLOW = "qwen-image-2.1-i2i"   # chosen by the spike on 2026-09-24: 2511 drifts ~1 native px
 REFERENCES = ("guide", "composite")
 
 
 def load_template(workflow):
-    """The `prompt` graph of the workflow's template file, read fresh."""
+    """The `prompt` graph of the workflow's template file, read fresh, with the
+    workflow's settings applied."""
     path = Path(workflow.template)
     if not path.is_absolute():
         path = REPO_DIR / path
-    return json.loads(path.read_text())["prompt"]
+    prompt = json.loads(path.read_text())["prompt"]
+    for (node, key), value in workflow.settings:
+        prompt[node]["inputs"][key] = value
+    return prompt
 
 
 def http_json(url, data=None, timeout=60, token=None):

@@ -5,7 +5,8 @@ Atlantis* (LucasArts, 1992) as painted high-definition art at exactly 4x
 their native size, with local models:
 
 - ComfyUI running one of two render workflows, chosen per run: Qwen-Image 2.1
-  img2img (`qwen-image-2.1-i2i`, the default), or Qwen-Image-Edit 2511 with
+  img2img (`qwen-image-2.1-i2i`, the default, with `qwen-image-2.1-i2i-faithful`
+  as its fallback for stuck rooms), or Qwen-Image-Edit 2511 with
   the InstantX Canny ControlNet (`qwen-edit-2511-canny`).
 - vLLM serving `Qwen/Qwen3.8-27B`, which captions each room before rendering
   and reviews each render afterwards.
@@ -113,9 +114,12 @@ rejection's correction is one fixed sentence asking the model to keep the
 reference layout.
 
 A room is **STUCK** when its latest judged attempt (one with a record — see
-Outputs below) was rejected and it has had 4 judged attempts: batch reports
-it and leaves it alone. Fix its caption, then run `make batch room=N
-force=1`. A failed attempt (a ComfyUI error, a timeout, Ctrl-C) has no
+Outputs below) was rejected and it has had 4 judged attempts. With the
+default workflow, the next batch renders it once more through
+`qwen-image-2.1-i2i-faithful` (denoise 0.9 instead of 1.0: a cleaner
+upscale that keeps closer to the source). If that is rejected too, batch
+reports the room and leaves it alone. Fix its caption, then run
+`make batch room=N force=1`. A failed attempt (a ComfyUI error, a timeout, Ctrl-C) has no
 record and never counts, so a room only failing on infrastructure is
 retried on every run instead, and batch exits 1.
 
@@ -163,7 +167,7 @@ data/rooms-ai/.quality/room_NNN/
     `text_encoders/qwen_2.5_vl_7b_uncensored_comfy_ready_bf16.safetensors`,
     `vae/qwen_image_vae.safetensors`,
     `controlnet/Qwen-Image-InstantX-ControlNet-Union.safetensors`;
-  - `qwen-image-2.1-i2i`: `diffusion_models/qwen_image_2.1_bf16.safetensors`,
+  - `qwen-image-2.1-i2i` and its fallback: `diffusion_models/qwen_image_2.1_bf16.safetensors`,
     `text_encoders/qwen3vl_8b_bf16.safetensors`,
     `vae/qwen_image_2.1_vae_bf16.safetensors`.
 

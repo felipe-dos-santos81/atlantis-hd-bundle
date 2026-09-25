@@ -387,15 +387,32 @@ class BatchTests(DriverFixture):
         self.assertIn("the awning moved", mocks.render.call_args.kwargs["positive"])
 
     def test_a_room_rejected_max_attempts_times_waits(self):
+        plain = ("--room", "1", "--workflow", "qwen-edit-2511-canny")    # no fallback
         for _ in range(a.MAX_ATTEMPTS):
-            self.batch("--room", "1", render=testkit.fake_render(testkit.shift_right))
-        code, _, err, mocks = self.batch("--room", "1")
+            self.batch(*plain, render=testkit.fake_render(testkit.shift_right))
+        code, _, err, mocks = self.batch(*plain)
         self.assertEqual(code, 1)
         mocks.render.assert_not_called()
         self.assertIn("STUCK   room_001: rejected 4 times", err)
-        code, out, _, _ = self.batch("--room", "1", "--force")
+        code, out, _, _ = self.batch(*plain, "--force")
         self.assertEqual(code, 0)
         self.assertIn("promoted attempt 5", out)
+
+    def test_a_stuck_room_gets_one_attempt_through_the_fallback(self):
+        shifted = testkit.fake_render(testkit.shift_right)
+        for _ in range(a.MAX_ATTEMPTS):
+            _, out, err, _ = self.batch("--room", "1", render=shifted)
+        self.assertIn("next batch renders it through the fallback qwen-image-2.1-i2i-faithful",
+                      out)
+        self.assertNotIn("STUCK", err)
+        code, out, err, mocks = self.batch("--room", "1", render=shifted)
+        self.assertEqual(mocks.render.call_args.args[0].name, "qwen-image-2.1-i2i-faithful",
+                         msg="the fifth attempt renders through the fallback")
+        self.assertIn("through the fallback qwen-image-2.1-i2i-faithful", out)
+        self.assertEqual(code, 1, msg="the fallback's rejection leaves the room stuck")
+        self.assertIn("STUCK   room_001", err)
+        _, _, _, mocks = self.batch("--room", "1")
+        mocks.render.assert_not_called()
 
     def test_a_failed_attempt_keeps_the_review_corrections(self):
         # Regression: a review rejected attempt 1, attempt 2 timed out, and attempt 3

@@ -17,7 +17,7 @@
   "13": {"class_type": "KSampler", "inputs": {
     "model": ["7", 0], "seed": 42, "steps": 40, "cfg": 1.0, "sampler_name": "euler",
     "scheduler": "simple", "positive": ["9", 0], "negative": ["9", 1],
-    "latent_image": ["12", 0], "denoise": 0.9}},
+    "latent_image": ["12", 0], "denoise": 1.0}},
   "14": {"class_type": "VAEDecode", "inputs": {"samples": ["13", 0], "vae": ["6", 0]}},
   "15": {"class_type": "SaveImage", "inputs": {"images": ["14", 0], "filename_prefix": "atl"}}
  }
