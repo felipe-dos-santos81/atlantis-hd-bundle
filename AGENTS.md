@@ -206,6 +206,17 @@ failures. Five captions needed a hand correction against the room image:
 
 Read every caption before a batch.
 
+**Full caption run (2026-09-25).** `make caption` captioned the other 84 rooms
+in about 3 h with no failures. A read against each room image changed 61 of
+them (205 substring fixes). The common failures:
+- misread objects: a taxi as a police car, a submarine conning tower as a sea
+  fort, lava-pouring machinery as a wooden winch;
+- light, sky or exterior claimed for underground rooms;
+- guessed lettering: room 10's marquee reads "MADAME SOPHIA", not "MADAME
+  XAVIER"; room 8's passport date and room 9's newspaper words are marked
+  illegible instead of guessed;
+- "panels" or "frames" invented for one continuous painting.
+
 Seed 42, match strength 0.5:
 - `qwen-edit-2511-canny`, room 1: 309.5 s a window. Rejected by the gate:
   shift −0.96, +0.80 native px over the room and its window; edge agreement
