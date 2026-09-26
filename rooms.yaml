@@ -1833,7 +1833,7 @@ room_041:
 
     *   **Center-Left (0.3–0.5):** A large, boxy superstructure (conning tower). It features a white stencil number "41" and a painted emblem of a single grey fish with two orange-red round shapes (like boxing gloves). A circular hatch ring is visible on the upper face.
 
-    *   **Right (0.7–0.8):** A second, smaller machine gun turret stands independently on the deck, positioned further right than the main structure.
+    *   **Right (0.67–0.85):** The one deck gun stands on the deck, well right of the conning tower. The deck between the conning tower's end (x≈0.57) and the gun (x≈0.67) is bare, and so is the deck right of x≈0.85: no other gun, turret or fitting stands there.
 
     *   **Bottom (0.0–1.0):** The flat deck surface runs horizontally across the entire width, detailed with panel lines and rust stains.
 
@@ -3387,7 +3387,7 @@ room_075:
     PALETTE: Land is warm tan/peach with faint greenish mottling and darker brown contour shading. Coasts carry a thin dark-brown outline ringed by a lighter cyan shallow-water halo. Open water is a flat medium turquoise-blue. Markers are red with black centres. Compass roses are pale gold with black and red.
 
 
-    TEXT: "BARNETT COLLEGE" (panel 1 centre, just above and right of its marker). "NEW YORK CITY" (panel 1 lower right, just below and right of its coastal marker). Both in a small pixelated serif, dark brown. No other legible lettering.
+    TEXT: "BARNETT COLLEGE" (panel 1 centre, just above and right of its marker). "NEW YORK CITY" (panel 1 lower right, just below and right of its coastal marker). Both in a small pixelated serif, dark brown. No other legible lettering. Panels 2, 3 and 4 have no markers and no lettering at all; the two labels and their markers exist only in panel 1.
 
 
     INVARIANTS: Preserve the exact positions and shapes of every coastline, the relative placement of the two named markers and their labels, the number and locations of the four compass roses, the internal border lines, and the consistent coast-outline-plus-shallow-halo treatment. Keep the four panels as separate maps with hard seams at 0.25, 0.5 and 0.75; do not blend geography across the seams. Ambiguity: precise national borders are stylised and not geographically accurate—repaint them as drawn, not as real geography. No people are present.
@@ -3447,7 +3447,7 @@ room_076:
 
     - The jeep must remain on the left road.
 
-    - The kiosk must be in the right foreground, clearly readable.
+    - There is exactly one kiosk, at the far right (x≈0.9–0.98). The jungle and grass from x≈0.1 to x≈0.85 hold no kiosk, signpost, stairs, ruin or other man-made object.
 
     - The pyramid must be visible in the right background behind the stone wall.
 
