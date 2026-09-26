@@ -1,7 +1,7 @@
 # Atlantis HD Import — Design
 
 Date: 2026-09-25
-Status: draft, awaiting user review
+Status: approved; amended 2026-09-25 while planning (§9)
 
 ## 1. Problem
 
@@ -39,25 +39,28 @@ data patch.
 
 ```
 atlantis-textures-importer/
-  README.md  AGENTS.md  Makefile  pyproject.toml  .gitignore
-  patches/0001-scumm-hd-backgrounds.patch   # against ScummVM v2026.3.0
-  engine/hd_background.h, hd_background.cpp # copied into engines/scumm/ at build time
-  engine/test_hd_background.cpp            # standalone clang++ tests of the pure core
+  README.md  AGENTS.md  Makefile  .gitignore
+  patches/scumm-hd.patch                   # edits to existing ScummVM files, against v2026.3.0
+  engine/scumm/hd_compose.{h,cpp}          # pure compositor core, no engine state
+  engine/scumm/hd_background.{h,cpp}       # engine glue: loading, blits, palette, cursor
+  engine/test_hd_compose.cpp               # standalone clang++ tests of the pure core
+  scripts/build_scummvm.sh                 # clone, copy engine/scumm/*, apply, configure, bundle
   importer/                                # Python: validate, stage, install, uninstall, verify
   tests/                                   # unittest
-  vendor/                                  # gitignored: ScummVM checkout and build
+  vendor/  build/                          # gitignored: ScummVM checkout; test binaries
 ```
 
 Make targets:
 
 | Target | Does |
 |---|---|
-| `make build` | Shallow-clones ScummVM at the pinned tag into `vendor/scummvm`, copies `engine/*` into `engines/scumm/`, applies `patches/`, configures with `--disable-all-engines --enable-engine=scumm` and libpng, builds an arm64 `ScummVM.app` and bundles its non-system dylibs so the bundle is self-contained. Idempotent. |
+| `make build` | Shallow-clones ScummVM at the pinned tag into `vendor/scummvm`, resets it to the tag, copies `engine/scumm/*` into `engines/scumm/`, applies `patches/scumm-hd.patch`, configures with `--disable-all-engines --enable-engine=scumm` and libpng, builds an arm64 `ScummVM.app` and bundles its non-system dylibs (`dylibbundler`) so the bundle is self-contained. Refuses to run when `vendor/scummvm` holds edits not saved to the patch. |
+| `make patch` | Saves the edits in `vendor/scummvm` to `patches/scumm-hd.patch`. |
 | `make install` | §5. Defaults `ai=` and `app=` to the paths in §1. |
 | `make uninstall` | §5.3. |
 | `make verify` | §5.4. |
 | `make test` | Python unittest suite. |
-| `make test-engine` | Builds and runs `engine/test_hd_background.cpp` with `clang++`. |
+| `make test-engine` | Builds and runs `engine/test_hd_compose.cpp` with `clang++`. |
 
 The importer reuses the exporter's `scumm` package through
 `PYTHONPATH=../atlantis-textures-exporter`; it does not duplicate the decoder.
@@ -72,19 +75,19 @@ The installed game directory gains `hd/`:
 | File | Content |
 |---|---|
 | `hd/room_NNN.png` | The AI background, RGB, 4w x 4h. |
-| `hd/room_NNN.idx.png` | The native room image, indexed (P mode), w x h, carrying the room's original 256-colour palette. Written by the importer with the exporter's decoder. |
-| `hd/manifest.json` | Written by the importer: patch version, per-room native size and SHA-256 of both files. Not read by the engine. |
+| `hd/room_NNN.idx` | The native room image and its original 256-colour palette: `ATLIDX01`, u16 LE width, u16 LE height, 768 palette bytes, width x height indices. Written by the importer with the exporter's decoder. A raw file, so the engine needs no paletted-PNG handling. |
+| `hd/manifest.json` | Written by the importer: source id of the engine sources, per-room native size and SHA-256 of both files. The engine only checks that it exists (it switches HD mode on). |
 
-The engine never decodes the room image a second time: the `.idx.png` is the
+The engine never decodes the room image a second time: the `.idx` map is the
 pristine reference and its palette is the reference palette.
 
 ### 4.2 Compositing
 
 `HDBackground` (in `engines/scumm/hd_background.{h,cpp}`) owns the loaded
-room data and the pure core:
+room data; the pure core lives in `engines/scumm/hd_compose.{h,cpp}`:
 
 ```
-composeStrip(native, idx, hd, curPal, refPal, cycling, cameraX, out)
+composeMain(src, srcPitch, w, h, roomX, roomY, room, cur, tint, cycling, fmt, out, outPitch)
 ```
 
 For each native pixel (x, y) of a main-screen strip, with room column
@@ -115,12 +118,14 @@ patched build behaves exactly like stock ScummVM.
 
 | Where | Change in HD mode |
 |---|---|
-| `ScummEngine::init` graphics setup (`scumm.cpp`, `initGraphics`) | 4 x `_screenWidth` by 4 x `_screenHeight`, 32-bit output format. |
-| `ScummEngine::startScene` (`room.cpp`) | Load the new room's `hd/` files; on a missing or wrong-sized file, log a warning and use the plain 4x upscale for that room. Never an error. |
-| `ScummEngine::drawStripToScreen` (`gfx.cpp`) | After the text composite into `_compositeBuf`, dispatch to `HDBackground` (main screen: `composeStrip`; other screens: 4x upscale) and blit the 32-bit result at 4x coordinates. |
-| Mouse (`input.cpp` event handling, and every `warpMouse` call) | Divide event coordinates by 4; multiply warp coordinates by 4. |
-| Cursor (`cursor.cpp`, the `sclW`/`sclH` scaling) | Scale by 4. |
-| Shake (`gfx.cpp`, `setShakePos` multiplier) | Multiply by 4. |
+| `ScummEngine::init` graphics setup (`scumm.cpp`) | `hdInit()`: only for Fate of Atlantis DOS with `hd/manifest.json` present; 4 x `_screenWidth` by 4 x `_screenHeight` in a 32-bit format the backend offers, else a warning and stock 8-bit. |
+| Room data (`hdBlit`) | Loaded lazily when a main-screen strip is drawn and `_currentRoom` differs from the loaded room. This covers `startScene`, loading a save (which sets `_currentRoom` directly) and the debugger's `room` command. A missing or wrong-sized file logs one warning and the room gets the plain 4x upscale. Never an error. |
+| `ScummEngine::drawStripToScreen` (`gfx.cpp`) | After the text composite into `_compositeBuf`, `hdBlit` (main screen: `composeMain`; other screens: 4x upscale) and blit the 32-bit result at 4x coordinates. |
+| `ScummEngine::updatePalette` (`palette.cpp`) | The backend's `setPalette` asserts on a 32-bit screen, so HD mode skips it: `hdSetPalette` keeps the effective palette, feeds it to the cursor palette, and recomposes the main, text and verb screens at once (fades loop without a screen update in between). |
+| Effects (`gfx.cpp` `dissolveEffect`, `scrollEffect`, `moveScreen`) | Their direct 8-bit blits go through `effectBlit`, which composes in HD mode; `moveScreen` scales its offsets by 4. |
+| Mouse (`input.cpp` event handling; the post-load `warpMouse` in `saveload.cpp`) | Divide event coordinates by 4; multiply warp coordinates by 4. |
+| Cursor (`cursor.cpp`) | `updateCursor` scales the 8-bit cursor by 4 and hands it over as CLUT8; `setBuiltinCursor` keeps a 1-byte stride although the screen is 32-bit. |
+| Shake (`gfx.cpp`, `updateScreenShakeEffect` multiplier) | Multiply by 4. |
 
 Performance: only dirty strips are composed; a full frame is 1280x800x4 bytes.
 
@@ -138,7 +143,8 @@ Performance: only dirty strips are composed; a full frame is 1280x800x4 bytes.
 3. **Stage.** Write `hd/` (§4.1) into a temporary folder beside the app.
 4. **Swap.** Rename `Contents/Resources/game/scummvm` to `scummvm.orig`, only
    if no `scummvm.orig` exists (a reinstall never overwrites the real
-   original; it replaces the current build instead). Copy the new
+   original; it replaces the current build instead). Copy
+   `game/game/configfile` to `configfile.orig` the same way. Copy the new
    `ScummVM.app` to `game/scummvm`, move the staged `hd/` to `game/game/hd`,
    remove `com.apple.quarantine`, run `codesign --force --deep -s -` on the
    app.
@@ -146,24 +152,27 @@ Performance: only dirty strips are composed; a full frame is 1280x800x4 bytes.
    `../scummvm/Contents/MacOS/scummvm`, so the new bundle keeps that
    executable path (`make build` renames the binary if needed).
 
-If step 4 fails, restore `scummvm.orig` to `scummvm`, delete any partial
-`hd/`, and exit non-zero.
+If step 4 fails, restore `scummvm.orig` and `configfile.orig`, delete any
+partial `hd/`, and exit non-zero.
 
 ### 5.2 Config and saves
 
-`configfile` is not edited (it has `aspect_ratio=false`, which suits
-1280x800). Saves use ScummVM's default folder; none exist on this Mac today,
-and ScummVM 2026.x loads 2.0 saves.
+The importer does not edit `configfile` (it has `aspect_ratio=false`, which
+suits 1280x800), but ScummVM 2026.x rewrites it on exit; hence the
+`configfile.orig` backup. Saves use ScummVM's default folder; none exist on
+this Mac today, and ScummVM 2026.x loads 2.0 saves.
 
 ### 5.3 `make uninstall`
 
-Restore `scummvm.orig` to `scummvm`, delete `game/game/hd`, re-sign.
-Idempotent; prints what it did.
+Refuse while the game is running. Restore `scummvm.orig` and
+`configfile.orig`, delete `game/game/hd`, re-sign. On a stock app it changes
+nothing and does not re-sign. Prints what it did.
 
 ### 5.4 `make verify`
 
-Re-hash `hd/` against `hd/manifest.json`; run the installed binary with
-`--version` and check it is the patched arm64 build.
+Re-hash `hd/` against `hd/manifest.json`; check the installed binary is an
+arm64 Mach-O that contains `ATLIDX01` (only the patched engine does), and that
+`scummvm.orig` exists.
 
 ## 6. Testing
 
@@ -174,11 +183,11 @@ guards.
 
 ### 6.1 Engine core
 
-`engine/test_hd_background.cpp` links only `hd_background.cpp`. One table
-test of `composeStrip`: exact HD with an unchanged palette; native fill where
+`engine/test_hd_compose.cpp` links only `hd_compose.cpp`. Tests of
+`composeMain` and `upscale`: exact HD with an unchanged palette; native fill where
 `i != idx`; fade ratio, including the zero-channel guard; cycled index falls
 back to native; camera offset in a scrolling room; 4x upscale of a non-main
-screen. One test of the missing-room fallback.
+screen; the missing-room fallback (no room data).
 
 ### 6.2 Importer
 
@@ -188,8 +197,10 @@ runner that records calls. They never touch the real app.
 
 - `validate`: one `subTest` table: missing, wrong size, not RGB, decode
   anomaly.
-- `install` and `uninstall`: a round trip restores the tree byte for byte; a
-  reinstall never overwrites `scummvm.orig`; a failure in the swap rolls back.
+- `install` and `uninstall`: a round trip restores the tree byte for byte,
+  even after ScummVM rewrote `configfile`; a reinstall never overwrites
+  `scummvm.orig`; a failure in the swap rolls back; uninstall refuses while
+  the game runs.
 - Real corpus, when the game and AI folder exist: all 96 rooms pass
   `validate`.
 
@@ -209,3 +220,19 @@ launches.
 - A native-resolution data patch for stock ScummVM.
 - Distributing the build or the art. The art is LucasArts/Disney copyright;
   personal use only. `vendor/` and any staged art are gitignored.
+
+## 9. Amendments made while planning
+
+Reading the v2026.3.0 sources changed these details; the design is unchanged.
+
+- Index maps are raw `.idx` files, not `.idx.png` (§4.1).
+- Room data loads lazily at draw time, not in `startScene`: loading a save
+  sets `_currentRoom` without `startScene` (§4.3).
+- Palette changes recompose the screen, because the backend's `setPalette`
+  asserts on a 32-bit screen; the cursor gets its own palette (§4.3).
+- Dissolve and scroll transitions, `moveScreen` and the built-in cursor's
+  stride needed HD handling (§4.3).
+- `configfile` is backed up and restored, because ScummVM rewrites it (§5).
+- `make verify` checks the binary's header and engine marker instead of
+  running `--version` (§5.4); no `pyproject.toml` (the importer needs only
+  Pillow, installed by `make env`).
