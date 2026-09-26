@@ -1,5 +1,31 @@
+diff --git a/engines/scumm/cursor.cpp b/engines/scumm/cursor.cpp
+index fa07a2a4..d795dd40 100644
+--- a/engines/scumm/cursor.cpp
++++ b/engines/scumm/cursor.cpp
+@@ -428,6 +428,11 @@ void ScummEngine::updateCursor() {
+ 	if (_macScreen && _game.version == 6 && _game.heversion == 0)
+ 		mac_scaleCursor(cursor, hotspotX, hotspotY, width, height);
+ 
++	if (_hd) {
++		hdUpdateCursor(cursor, width, height, hotspotX, hotspotY, transColor);
++		return;
++	}
++
+ 	// FIXME: This is likely too small on high DPI displays with HE 70 games.
+ #ifdef USE_RGB_COLOR
+ 	Graphics::PixelFormat format = _system->getScreenFormat();
+@@ -1292,7 +1297,8 @@ void ScummEngine_v5::setBuiltinCursor(int idx) {
+ 
+ 	int sclW = (_renderMode == Common::kRenderHercA || _renderMode == Common::kRenderHercG || _enableEGADithering) ? 2 : _textSurfaceMultiplier;
+ 	int sclH = (_renderMode == Common::kRenderHercA || _renderMode == Common::kRenderHercG) ? 1 : (_enableEGADithering ? 2 : _textSurfaceMultiplier);
+-	int sclW2 = _outputPixelFormat.bytesPerPixel * sclW;
++	// The cursor stays 8-bit in HD mode although the screen is 32-bit.
++	int sclW2 = (_hd ? 1 : _outputPixelFormat.bytesPerPixel) * sclW;
+ 
+ 	_cursor.hotspotX = _cursorHotspots[2 * _currentCursor] * sclW;
+ 	_cursor.hotspotY = _cursorHotspots[2 * _currentCursor + 1] * sclH;
 diff --git a/engines/scumm/gfx.cpp b/engines/scumm/gfx.cpp
-index bf85f13c..9cb6396c 100644
+index bf85f13c..16d64e1f 100644
 --- a/engines/scumm/gfx.cpp
 +++ b/engines/scumm/gfx.cpp
 @@ -769,6 +769,11 @@ void ScummEngine::drawStripToScreen(VirtScreen *vs, int x, int width, int top, i
@@ -14,6 +40,84 @@ index bf85f13c..9cb6396c 100644
  		if (_game.platform == Common::kPlatformNES) {
  			// HACK: This is dirty hack which renders narrow NES rooms centered
  			// NES can address negative number strips and that poses problem for
+@@ -1746,6 +1751,9 @@ void ScummEngine::moveScreen(int dx, int dy, int height) {
+ 			dy <<= 1;
+ 			height <<= 1;
+ 		}
++		dx *= hdScale();
++		dy *= hdScale();
++		height *= hdScale();
+ 		screen->move(dx, dy, height);
+ 	}
+ 
+@@ -4749,7 +4757,7 @@ void ScummEngine::dissolveEffect(int width, int height) {
+ 				src = ditherVGAtoEGA(pitch, x, y, wd, ht);
+ 			}
+ 
+-			_system->copyRectToScreen(src, pitch, x, y, wd, ht);
++			effectBlit(vs, src, pitch, x, y, wd, ht);
+ 		}
+ 
+ 		// Test for 1x1 pattern...
+@@ -4840,7 +4848,7 @@ void ScummEngine::scrollEffect(int dir) {
+ 						src = ditherVGAtoEGA(vsPitch, tx, ty, wd, ht);
+ 					}
+ 
+-					_system->copyRectToScreen(src, vsPitch * m, tx, ty * m, wd, ht * m);
++					effectBlit(vs, src, vsPitch * m, tx, ty * m, wd, ht * m);
+ 				}
+ 			}
+ 
+@@ -4874,7 +4882,7 @@ void ScummEngine::scrollEffect(int dir) {
+ 						src = ditherVGAtoEGA(vsPitch, tx, ty, wd, ht);
+ 					}
+ 
+-					_system->copyRectToScreen(src, vsPitch * m, 0, 0, wd * m, ht * m);
++					effectBlit(vs, src, vsPitch * m, 0, 0, wd * m, ht * m);
+ 				}
+ 			}
+ 
+@@ -4911,7 +4919,7 @@ void ScummEngine::scrollEffect(int dir) {
+ 						src = ditherVGAtoEGA(vsPitch, tx, ty, wd, ht);
+ 					}
+ 
+-					_system->copyRectToScreen(src, vsPitch * m, tx * m, 0, wd * m, ht * m);
++					effectBlit(vs, src, vsPitch * m, tx * m, 0, wd * m, ht * m);
+ 				}
+ 			}
+ 			waitForTimer(delay, true);
+@@ -4947,7 +4955,7 @@ void ScummEngine::scrollEffect(int dir) {
+ 						src = ditherVGAtoEGA(vsPitch, tx, ty, wd, ht);
+ 					}
+ 
+-					_system->copyRectToScreen(src, vsPitch * m, 0, 0, wd * m, ht * m);
++					effectBlit(vs, src, vsPitch * m, 0, 0, wd * m, ht * m);
+ 				}
+ 			}
+ 
+@@ -4991,7 +4999,7 @@ void ScummEngine::updateScreenShakeEffect() {
+ 	if (!_shakeNextTick)
+ 		_shakeNextTick = now;
+ 
+-	int multiplier = (_enableEGADithering ? 2 : 1) * _textSurfaceMultiplier;
++	int multiplier = (_enableEGADithering ? 2 : 1) * _textSurfaceMultiplier * hdScale();
+ 
+ 	while (now >= _shakeNextTick) {
+ 		_shakeFrame = (_shakeFrame + 1) % NUM_SHAKE_POSITIONS;
+diff --git a/engines/scumm/input.cpp b/engines/scumm/input.cpp
+index ecef09cf..a0cd8b97 100644
+--- a/engines/scumm/input.cpp
++++ b/engines/scumm/input.cpp
+@@ -249,6 +249,9 @@ void ScummEngine::parseEvent(Common::Event event) {
+ 		} else if ((_textSurfaceMultiplier == 2 || _macScreen) || _renderMode == Common::kRenderCGA_BW || _enableEGADithering) {
+ 			_mouse.x >>= 1;
+ 			_mouse.y >>= 1;
++		} else if (_hd) {
++			_mouse.x /= hdScale();
++			_mouse.y /= hdScale();
+ 		}
+ 
+ 		if (_useMacScreenCorrectHeight && _macScreen) {
 diff --git a/engines/scumm/module.mk b/engines/scumm/module.mk
 index 2cee05ab..35fe3365 100644
 --- a/engines/scumm/module.mk
@@ -44,6 +148,20 @@ index a3758d7f..30e0e66b 100644
  #ifdef USE_RGB_COLOR
  #ifndef DISABLE_TOWNS_DUAL_LAYER_MODE
  	if (_game.platform == Common::kPlatformFMTowns) {
+diff --git a/engines/scumm/saveload.cpp b/engines/scumm/saveload.cpp
+index 55af0406..6f18646a 100644
+--- a/engines/scumm/saveload.cpp
++++ b/engines/scumm/saveload.cpp
+@@ -1692,6 +1692,9 @@ void ScummEngine::saveLoadWithSerializer(Common::Serializer &s) {
+ 		} else if (_macScreen) {
+ 			x *= 2;
+ 			y *= 2;
++		} else if (_hd) {
++			x *= hdScale();
++			y *= hdScale();
+ 		}
+ 
+ 		updateCursor();
 diff --git a/engines/scumm/scumm.cpp b/engines/scumm/scumm.cpp
 index f0bb1a53..d3eb7742 100644
 --- a/engines/scumm/scumm.cpp
