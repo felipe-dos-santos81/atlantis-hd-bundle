@@ -7,7 +7,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from importer.app import AppLayout, InstallError, install, preflight, run, uninstall, verify
+from importer.app import AppLayout, InstallError, check_game, install, preflight, run_command, uninstall, verify
 from importer.rooms import load_native_rooms, validate
 from importer.stage import source_id, stage
 
@@ -27,7 +27,7 @@ def _report(problems: list[str], ok: str) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None, runner=run, load_rooms=load_native_rooms) -> int:
+def main(argv: list[str] | None = None, runner=run_command, load_rooms=load_native_rooms) -> int:
     parser = argparse.ArgumentParser(prog="importer", description="HD backgrounds in the GOG Fate of Atlantis app.")
     parser.add_argument("command", choices=["validate", "install", "uninstall", "verify"])
     parser.add_argument("--ai", type=Path, default=DEFAULT_AI, help="folder of AI room_NNN.png backgrounds")
@@ -44,7 +44,7 @@ def main(argv: list[str] | None = None, runner=run, load_rooms=load_native_rooms
             return _report(verify(layout), "installed and intact")
 
         installing = args.command == "install"
-        problems = preflight(layout, args.build if installing else None, runner if installing else None)
+        problems = preflight(layout, args.build, runner) if installing else check_game(layout)
         if problems:
             return _report(problems, "")
         rooms = load_rooms(layout.data)

@@ -1,5 +1,5 @@
 diff --git a/engines/scumm/cursor.cpp b/engines/scumm/cursor.cpp
-index fa07a2a4..d795dd40 100644
+index fa07a2a4..aa16d4b3 100644
 --- a/engines/scumm/cursor.cpp
 +++ b/engines/scumm/cursor.cpp
 @@ -428,6 +428,11 @@ void ScummEngine::updateCursor() {
@@ -14,18 +14,8 @@ index fa07a2a4..d795dd40 100644
  	// FIXME: This is likely too small on high DPI displays with HE 70 games.
  #ifdef USE_RGB_COLOR
  	Graphics::PixelFormat format = _system->getScreenFormat();
-@@ -1292,7 +1297,8 @@ void ScummEngine_v5::setBuiltinCursor(int idx) {
- 
- 	int sclW = (_renderMode == Common::kRenderHercA || _renderMode == Common::kRenderHercG || _enableEGADithering) ? 2 : _textSurfaceMultiplier;
- 	int sclH = (_renderMode == Common::kRenderHercA || _renderMode == Common::kRenderHercG) ? 1 : (_enableEGADithering ? 2 : _textSurfaceMultiplier);
--	int sclW2 = _outputPixelFormat.bytesPerPixel * sclW;
-+	// The cursor stays 8-bit in HD mode although the screen is 32-bit.
-+	int sclW2 = (_hd ? 1 : _outputPixelFormat.bytesPerPixel) * sclW;
- 
- 	_cursor.hotspotX = _cursorHotspots[2 * _currentCursor] * sclW;
- 	_cursor.hotspotY = _cursorHotspots[2 * _currentCursor + 1] * sclH;
 diff --git a/engines/scumm/gfx.cpp b/engines/scumm/gfx.cpp
-index bf85f13c..16d64e1f 100644
+index bf85f13c..bc55ddab 100644
 --- a/engines/scumm/gfx.cpp
 +++ b/engines/scumm/gfx.cpp
 @@ -769,6 +769,11 @@ void ScummEngine::drawStripToScreen(VirtScreen *vs, int x, int width, int top, i
@@ -55,7 +45,7 @@ index bf85f13c..16d64e1f 100644
  			}
  
 -			_system->copyRectToScreen(src, pitch, x, y, wd, ht);
-+			effectBlit(vs, src, pitch, x, y, wd, ht);
++			effectBlit(vs, src, pitch, vs->xstart + x, y - vs->topline, x, y, wd, ht);
  		}
  
  		// Test for 1x1 pattern...
@@ -64,7 +54,7 @@ index bf85f13c..16d64e1f 100644
  					}
  
 -					_system->copyRectToScreen(src, vsPitch * m, tx, ty * m, wd, ht * m);
-+					effectBlit(vs, src, vsPitch * m, tx, ty * m, wd, ht * m);
++					effectBlit(vs, src, vsPitch * m, vs->xstart, y - step, tx, ty * m, wd, ht * m);
  				}
  			}
  
@@ -73,7 +63,7 @@ index bf85f13c..16d64e1f 100644
  					}
  
 -					_system->copyRectToScreen(src, vsPitch * m, 0, 0, wd * m, ht * m);
-+					effectBlit(vs, src, vsPitch * m, 0, 0, wd * m, ht * m);
++					effectBlit(vs, src, vsPitch * m, vs->xstart, vs->h - y, 0, 0, wd * m, ht * m);
  				}
  			}
  
@@ -82,7 +72,7 @@ index bf85f13c..16d64e1f 100644
  					}
  
 -					_system->copyRectToScreen(src, vsPitch * m, tx * m, 0, wd * m, ht * m);
-+					effectBlit(vs, src, vsPitch * m, tx * m, 0, wd * m, ht * m);
++					effectBlit(vs, src, vsPitch * m, vs->xstart + x - step, 0, tx * m, 0, wd * m, ht * m);
  				}
  			}
  			waitForTimer(delay, true);
@@ -91,7 +81,7 @@ index bf85f13c..16d64e1f 100644
  					}
  
 -					_system->copyRectToScreen(src, vsPitch * m, 0, 0, wd * m, ht * m);
-+					effectBlit(vs, src, vsPitch * m, 0, 0, wd * m, ht * m);
++					effectBlit(vs, src, vsPitch * m, vs->xstart + vs->w - x, 0, 0, 0, wd * m, ht * m);
  				}
  			}
  
@@ -163,7 +153,7 @@ index 55af0406..6f18646a 100644
  
  		updateCursor();
 diff --git a/engines/scumm/scumm.cpp b/engines/scumm/scumm.cpp
-index f0bb1a53..d3eb7742 100644
+index f0bb1a53..11222c13 100644
 --- a/engines/scumm/scumm.cpp
 +++ b/engines/scumm/scumm.cpp
 @@ -62,6 +62,7 @@
@@ -191,11 +181,29 @@ index f0bb1a53..d3eb7742 100644
  	} else {
  		int screenWidth = _screenWidth;
  		int screenHeight = _screenHeight;
+@@ -1509,7 +1513,8 @@ Common::Error ScummEngine::init() {
+ 		_localizer = loc;
+ #endif
+ 
+-	_outputPixelFormat = _system->getScreenFormat();
++	// In HD mode the engine still draws 8-bit; only hdBlit writes the 32-bit screen.
++	_outputPixelFormat = _hd ? Graphics::PixelFormat::createFormatCLUT8() : _system->getScreenFormat();
+ 
+ 	setupScumm(macResourceFile);
+ 
 diff --git a/engines/scumm/scumm.h b/engines/scumm/scumm.h
-index ae7b4bb7..41abe9df 100644
+index ae7b4bb7..a9e55469 100644
 --- a/engines/scumm/scumm.h
 +++ b/engines/scumm/scumm.h
-@@ -96,6 +96,7 @@ class MacGui;
+@@ -43,6 +43,7 @@
+ #include "scumm/file.h"
+ #include "scumm/gfx.h"
+ #include "scumm/detection.h"
++#include "scumm/hd_compose.h"
+ #include "scumm/script.h"
+ #include "scumm/serializer.h"
+ 
+@@ -96,6 +97,7 @@ class MacGui;
  class MusicEngine;
  class Player_Towns;
  class ScummEngine;
@@ -203,16 +211,16 @@ index ae7b4bb7..41abe9df 100644
  class ScummDebugger;
  class Sound;
  class Localizer;
-@@ -1498,6 +1499,15 @@ protected:
+@@ -1498,6 +1500,15 @@ protected:
  	bool _supportsEGADithering = false;
  	bool _enableSegaShadowMode = false;
  
 +	// HD backgrounds from <game>/hd/ (atlantis-textures-importer); null when off.
 +	HDBackground *_hd = nullptr;
-+	int hdScale() const { return _hd ? 4 : 1; } // HDCompose::kScale
++	int hdScale() const { return _hd ? HDCompose::kScale : 1; }
 +	bool hdInit();
 +	void hdBlit(VirtScreen *vs, const byte *src, int srcPitch, int roomX, int roomY, int dstX, int dstY, int w, int h);
-+	void effectBlit(VirtScreen *vs, const byte *src, int pitch, int x, int y, int w, int h);
++	void effectBlit(VirtScreen *vs, const byte *src, int pitch, int roomX, int roomY, int x, int y, int w, int h);
 +	void hdSetPalette(const byte *colors, int first, int num);
 +	void hdUpdateCursor(const byte *cursor, int w, int h, int hotspotX, int hotspotY, uint32 transColor);
 +

@@ -8,6 +8,10 @@ TAG=v2026.3.0
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 SRC="$HERE/vendor/scummvm"
 PATCH="$HERE/patches/scumm-hd.patch"
+STAMP="$HERE/vendor/.scummvm-applied"  # fingerprint of what the last build applied
+
+# The edits in vendor/scummvm: the diff to the tag plus the copied engine files.
+applied() { { git -C "$SRC" diff; cat "$SRC"/engines/scumm/hd_*.h "$SRC"/engines/scumm/hd_*.cpp; } | shasum; }
 
 for tool in git make dylibbundler codesign; do
 	command -v "$tool" >/dev/null || { echo "missing $tool (brew install $tool)" >&2; exit 1; }
@@ -15,8 +19,9 @@ done
 
 if [ ! -d "$SRC/.git" ]; then
 	git clone --depth 1 --branch "$TAG" https://github.com/scummvm/scummvm.git "$SRC"
-elif ! git -C "$SRC" diff --quiet && ! git -C "$SRC" diff | cmp -s - "$PATCH"; then
-	echo "vendor/scummvm has edits that are not in patches/scumm-hd.patch; run 'make patch' first" >&2
+elif [ -f "$STAMP" ] && [ "$(applied)" != "$(cat "$STAMP")" ]; then
+	echo "vendor/scummvm has unsaved edits: run 'make engine-patch' for existing files;" >&2
+	echo "edits to hd_* files belong in engine/scumm/" >&2
 	exit 1
 fi
 
@@ -26,6 +31,7 @@ cp "$HERE"/engine/scumm/* "$SRC/engines/scumm/"
 if [ -s "$PATCH" ]; then
 	git -C "$SRC" apply "$PATCH"
 fi
+applied > "$STAMP"
 
 cd "$SRC"
 # Reconfigure when the flags below change (this script is newer than config.mk).

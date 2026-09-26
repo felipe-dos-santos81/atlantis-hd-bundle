@@ -29,7 +29,7 @@ def load_native_rooms(game_dir: Path) -> list[NativeRoom]:
     from scumm.archive import Archive
     from scumm.room import extract_background
 
-    archive = Archive.load(Path(game_dir) / "ATLANTIS.001")
+    archive = Archive.load(game_dir / "ATLANTIS.001")
     rooms = []
     for number in sorted(archive.room_index()):
         bg = extract_background(archive, number)
@@ -45,7 +45,7 @@ def validate(rooms: list[NativeRoom], ai_dir: Path) -> list[str]:
         name = room_name(room.number)
         if room.anomalies:
             problems.append(f"{name}: the decoder reported {room.anomalies} anomalies; its index map would be wrong")
-        path = Path(ai_dir) / f"{name}.png"
+        path = ai_dir / f"{name}.png"
         if not path.is_file():
             problems.append(f"{path.name}: missing")
             continue

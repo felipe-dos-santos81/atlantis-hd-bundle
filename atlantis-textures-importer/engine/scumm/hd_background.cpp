@@ -1,3 +1,24 @@
+/* ScummVM - Graphic Adventure Engine
+ *
+ * ScummVM is the legal property of its developers, whose names
+ * are too numerous to list here. Please refer to the COPYRIGHT
+ * file distributed with this source distribution.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
 /* HD room backgrounds for Fate of Atlantis (atlantis-textures-importer). */
 
 #include "common/file.h"
@@ -5,6 +26,7 @@
 #include "common/system.h"
 #include "common/textconsole.h"
 #include "engines/util.h"
+#include "graphics/blit.h"
 #include "graphics/cursorman.h"
 #include "graphics/surface.h"
 #include "image/png.h"
@@ -16,7 +38,7 @@ namespace Scumm {
 
 static const char kIdxMagic[] = "ATLIDX01"; // written by atlantis-textures-importer (importer/stage.py)
 
-HDBackground::HDBackground(const Graphics::PixelFormat &format) : _room(-1), _valid(false), _tintDirty(true) {
+HDBackground::HDBackground(const Graphics::PixelFormat &format) : _pixelFormat(format), _room(-1), _valid(false), _paletteSet(false), _tintDirty(true) {
 	_format.rShift = format.rShift;
 	_format.gShift = format.gShift;
 	_format.bShift = format.bShift;
@@ -29,12 +51,12 @@ HDBackground::HDBackground(const Graphics::PixelFormat &format) : _room(-1), _va
 	memset(_palette, 0, sizeof(_palette));
 }
 
-void HDBackground::loadRoom(int room) {
+void HDBackground::loadRoom(int room, int roomW, int roomH) {
 	_room = room;
 	_valid = false;
 	_tintDirty = true;
 	_idx.clear();
-	_hd.clear();
+	_pixels.clear();
 	if (room <= 0)
 		return;
 
@@ -43,7 +65,7 @@ void HDBackground::loadRoom(int room) {
 
 	Common::File idx;
 	if (!idx.open(Common::Path(idxName))) {
-		warning("HD backgrounds: %s is missing; room %d stays at native resolution", idxName.c_str(), room);
+		warning("HD backgrounds: %s is missing; room %d gets a plain 4x upscale", idxName.c_str(), room);
 		return;
 	}
 	char magic[8];
@@ -53,6 +75,10 @@ void HDBackground::loadRoom(int room) {
 	}
 	const int w = idx.readUint16LE();
 	const int h = idx.readUint16LE();
+	if (w != roomW || h != roomH) {
+		warning("HD backgrounds: %s is %dx%d but room %d is %dx%d; it gets a plain 4x upscale", idxName.c_str(), w, h, room, roomW, roomH);
+		return;
+	}
 	_idx.resize(w * h);
 	if (w <= 0 || h <= 0 || idx.read(_ref, 768) != 768 || idx.read(_idx.data(), w * h) != (uint32)(w * h)) {
 		warning("HD backgrounds: %s is truncated", idxName.c_str());
@@ -63,7 +89,7 @@ void HDBackground::loadRoom(int room) {
 	Common::File png;
 	Image::PNGDecoder decoder;
 	if (!png.open(Common::Path(pngName)) || !decoder.loadStream(png)) {
-		warning("HD backgrounds: %s is missing or unreadable; room %d stays at native resolution", pngName.c_str(), room);
+		warning("HD backgrounds: %s is missing or unreadable; room %d gets a plain 4x upscale", pngName.c_str(), room);
 		return;
 	}
 	const Graphics::Surface *s = decoder.getSurface();
@@ -71,32 +97,36 @@ void HDBackground::loadRoom(int room) {
 		warning("HD backgrounds: %s is not an RGB image of %dx%d", pngName.c_str(), w * HDCompose::kScale, h * HDCompose::kScale);
 		return;
 	}
-	_hd.resize(s->w * s->h);
-	for (int y = 0; y < s->h; y++) {
-		for (int x = 0; x < s->w; x++) {
-			uint8 r, g, b;
-			s->format.colorToRGB(s->getPixel(x, y), r, g, b);
-			_hd[y * s->w + x] = HDCompose::pack(_format, r, g, b);
-		}
-	}
+	_pixels.resize(s->w * s->h);
+	Graphics::crossBlit((byte *)_pixels.data(), (const byte *)s->getPixels(), s->w * sizeof(uint32), s->pitch,
+	                    s->w, s->h, _pixelFormat, s->format);
 	_data.w = w;
 	_data.h = h;
 	_data.idx = _idx.data();
-	_data.hd = _hd.data();
+	_data.hd = _pixels.data();
 	_valid = true;
 #else
 	warning("HD backgrounds: this build has no PNG support");
 #endif
 }
 
-void HDBackground::setPalette(const byte *colors, int first, int num) {
-	memcpy(_palette + first * 3, colors, num * 3);
-	_tintDirty = true;
+bool HDBackground::setPalette(const byte *colors, int first, int num, bool *changed) {
+	bool any = false;
+	for (int i = 0; i < num; i++) {
+		byte *entry = _palette + (first + i) * 3;
+		if (!_paletteSet || memcmp(entry, colors + i * 3, 3) != 0) {
+			memcpy(entry, colors + i * 3, 3);
+			changed[first + i] = any = true;
+		}
+	}
+	_paletteSet = true;
+	_tintDirty |= any;
+	return any;
 }
 
 const HDCompose::Tint &HDBackground::tint() {
 	if (_tintDirty) {
-		HDCompose::buildTint(_palette, _valid ? _ref : _palette, _tint);
+		HDCompose::buildTint(_palette, _valid ? _ref : _palette, _format, _tint);
 		_tintDirty = false;
 	}
 	return _tint;
@@ -150,57 +180,66 @@ void ScummEngine::hdBlit(VirtScreen *vs, const byte *src, int srcPitch, int room
 	const int outPitch = w * s;
 	uint32 *out = _hd->buffer(outPitch * h * s);
 
+	// Only the main screen shows the room; the verb and text screens are a plain upscale.
+	const HDCompose::Room *room = nullptr;
+	bool cycling[256] = {};
 	if (vs->number == kMainVirtScreen) {
 		// Lazily, so startScene, loading a save and the debugger's room command are all covered.
 		if (_hd->room() != _currentRoom)
-			_hd->loadRoom(_currentRoom);
-		bool cycling[256] = {};
+			_hd->loadRoom(_currentRoom, _roomWidth, _roomHeight);
+		room = _hd->roomData();
 		for (int i = 0; i < ARRAYSIZE(_colorCycle); i++) {
 			const ColorCycle &c = _colorCycle[i];
 			if (c.delay)
 				for (int j = c.start; j <= c.end; j++)
 					cycling[j] = true;
 		}
-		HDCompose::composeMain(src, srcPitch, w, h, roomX, roomY, _hd->roomData(), _hd->palette(), _hd->tint(),
-		                       cycling, _hd->format(), out, outPitch);
-	} else {
-		HDCompose::upscale(src, srcPitch, w, h, _hd->palette(), _hd->format(), out, outPitch);
 	}
-	_system->copyRectToScreen(out, outPitch * 4, dstX * s, dstY * s, w * s, h * s);
+	HDCompose::composeMain(src, srcPitch, w, h, roomX, roomY, room, _hd->tint(), cycling, _hd->format(), out, outPitch);
+	_system->copyRectToScreen(out, outPitch * sizeof(uint32), dstX * s, dstY * s, w * s, h * s);
 }
 
-void ScummEngine::effectBlit(VirtScreen *vs, const byte *src, int pitch, int x, int y, int w, int h) {
-	if (!_hd) {
+void ScummEngine::effectBlit(VirtScreen *vs, const byte *src, int pitch, int roomX, int roomY, int x, int y, int w, int h) {
+	if (_hd)
+		hdBlit(vs, src, pitch, roomX, roomY, x, y, w, h);
+	else
 		_system->copyRectToScreen(src, pitch, x, y, w, h);
-		return;
-	}
-	// Effects blit straight from the virtual screen; recover the room position from the pointer.
-	const int offset = src - (const byte *)vs->getBasePtr(0, 0);
-	hdBlit(vs, src, pitch, offset % vs->pitch, offset / vs->pitch, x, y, w, h);
 }
 
 void ScummEngine::hdSetPalette(const byte *colors, int first, int num) {
-	_hd->setPalette(colors, first, num);
+	bool changed[256] = {};
+	if (!_hd->setPalette(colors, first, num, changed))
+		return;
 	CursorMan.replaceCursorPalette(_hd->palette(), 0, 256);
 	CursorMan.disableCursorPalette(false);
 	if (!_textSurface.getPixels())
 		return;
 	// A 32-bit screen does not follow palette changes, and fades loop without
-	// a screen update in between: recompose every visible screen now.
+	// a screen update in between: recompose now every strip showing a changed
+	// colour, in the game graphics or in the text over them.
 	static const VirtScreenNumber screens[] = { kMainVirtScreen, kTextVirtScreen, kVerbVirtScreen };
 	for (int i = 0; i < ARRAYSIZE(screens); i++) {
 		VirtScreen *vs = &_virtscr[screens[i]];
-		if (vs->h > 0 && vs->getBasePtr(0, 0))
-			drawStripToScreen(vs, 0, vs->w, 0, vs->h);
+		if (vs->h <= 0 || !vs->getBasePtr(0, 0))
+			continue;
+		for (int x = 0; x < vs->w; x += 8) {
+			bool shows = false;
+			for (int y = 0; y < vs->h && !shows; y++) {
+				const byte *game = vs->getPixels(x, y);
+				const byte *text = (const byte *)_textSurface.getBasePtr(x, vs->topline + y);
+				for (int k = 0; k < 8 && !shows; k++)
+					shows = changed[game[k]] || (text[k] != CHARSET_MASK_TRANSPARENCY && changed[text[k]]);
+			}
+			if (shows)
+				drawStripToScreen(vs, x, 8, 0, vs->h);
+		}
 	}
 }
 
 void ScummEngine::hdUpdateCursor(const byte *cursor, int w, int h, int hotspotX, int hotspotY, uint32 transColor) {
 	const int s = HDCompose::kScale;
 	Common::Array<byte> big(w * s * h * s);
-	for (int y = 0; y < h * s; y++)
-		for (int x = 0; x < w * s; x++)
-			big[y * w * s + x] = cursor[(y / s) * w + x / s];
+	Graphics::scaleBlit(big.data(), cursor, w * s, w, w * s, h * s, w, h, Graphics::PixelFormat::createFormatCLUT8());
 	CursorMan.replaceCursor(big.data(), w * s, h * s, hotspotX * s, hotspotY * s, transColor);
 }
 

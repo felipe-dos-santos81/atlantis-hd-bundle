@@ -1,10 +1,12 @@
+import contextlib
+import io
 import itertools
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import testkit
-from importer.app import AppLayout, InstallError, install, preflight, uninstall, verify
+from importer.app import ARM64_HEADER, GAME_RUNNING, AppLayout, InstallError, install, preflight, uninstall, verify
 from importer.stage import stage
 
 
@@ -29,10 +31,12 @@ class AppTests(unittest.TestCase):
         return hd
 
     def install(self, runner=None):
-        install(self.layout, self.build, self.staged(), runner or testkit.Runner(), log=lambda m: None)
+        with contextlib.redirect_stdout(io.StringIO()):
+            install(self.layout, self.build, self.staged(), runner or testkit.Runner())
 
     def uninstall(self, runner=None):
-        uninstall(self.layout, runner or testkit.Runner(), log=lambda m: None)
+        with contextlib.redirect_stdout(io.StringIO()):
+            uninstall(self.layout, runner or testkit.Runner())
 
     def test_install_then_uninstall_restores_the_stock_app(self):
         runner = testkit.Runner()
@@ -48,11 +52,14 @@ class AppTests(unittest.TestCase):
         self.assertEqual(testkit.snapshot(self.app), self.stock)
         self.assertEqual(runner.programs(), ["pgrep"])
 
-    def test_reinstall_keeps_the_original_backup(self):
+    def test_reinstall_keeps_the_backup_and_the_engine_id_once(self):
+        # ScummVM 2026 cannot upgrade GOG's 1.7-era [atlantis] target without engineid.
         self.install()
         self.install()
         self.assertEqual((self.layout.backup / "Contents/MacOS/scummvm").read_bytes(), testkit.STOCK_BINARY)
         self.assertEqual(self.layout.binary.read_bytes(), (self.build / "Contents/MacOS/scummvm").read_bytes())
+        self.assertEqual(self.layout.config.read_text(),
+                         "[scummvm]\nversioninfo=1.7.0\n\n[atlantis]\nengineid=scumm\ngameid=atlantis\n")
 
     def test_install_after_an_interrupted_one(self):
         self.layout.engine.rename(self.layout.backup)  # a crash right after the backup
@@ -60,25 +67,24 @@ class AppTests(unittest.TestCase):
         self.assertEqual((self.layout.backup / "Contents/MacOS/scummvm").read_bytes(), testkit.STOCK_BINARY)
         self.assertEqual(verify(self.layout), [])
 
-    def test_install_adds_the_engine_id_once(self):
-        # ScummVM 2026 cannot upgrade GOG's 1.7-era [atlantis] target without it.
-        self.install()
-        self.install()
-        self.assertEqual(self.layout.config.read_text(),
-                         "[scummvm]\nversioninfo=1.7.0\n\n[atlantis]\nengineid=scumm\ngameid=atlantis\n")
+    def test_a_failed_install_rolls_back_to_stock(self):
+        def no_target():
+            self.layout.config.write_text("[scummvm]\nversioninfo=1.7.0\n")
 
-    def test_a_configfile_without_the_target_rolls_back(self):
-        self.layout.config.write_text("[scummvm]\nversioninfo=1.7.0\n")
-        stock = testkit.snapshot(self.app)
-        with self.assertRaisesRegex(InstallError, r"no \[atlantis\] target"):
-            self.install()
-        self.assertEqual(testkit.snapshot(self.app), stock)
+        def missing_build():
+            self.build = self.root / "missing.app"
 
-    def test_a_failed_copy_rolls_back_to_stock(self):
-        self.build = self.root / "missing.app"
-        with self.assertRaisesRegex(InstallError, "rolled back"):
-            self.install()
-        self.assertEqual(testkit.snapshot(self.app), self.stock)
+        config, build = self.layout.config.read_text(), self.build
+        for name, break_it, message in [("configfile without [atlantis]", no_target, r"no \[atlantis\] target"),
+                                        ("failed copy", missing_build, "rolled back")]:
+            with self.subTest(name):
+                self.layout.config.write_text(config)
+                self.build = build
+                break_it()
+                before = testkit.snapshot(self.app)
+                with self.assertRaisesRegex(InstallError, message):
+                    self.install()
+                self.assertEqual(testkit.snapshot(self.app), before)
 
     def test_uninstall_refuses_while_running(self):
         self.install()
@@ -97,11 +103,10 @@ class AppTests(unittest.TestCase):
         no_game = self.root / "empty.app"
         cases = [
             ("ready", self.layout, self.build, testkit.Runner(), []),
-            ("running", self.layout, self.build, testkit.Runner(running=True),
-             ["the game is running; quit it first"]),
+            ("running", self.layout, self.build, testkit.Runner(running=True), [GAME_RUNNING]),
             ("not built", self.layout, self.root / "nowhere.app", testkit.Runner(),
-             [f"{self.root / 'nowhere.app'}: no built ScummVM; run make build"]),
-            ("not the game", AppLayout(no_game), None, None,
+             [f"{self.root / 'nowhere.app'}: no built ScummVM; run make engine-build"]),
+            ("not the game", AppLayout(no_game), self.build, testkit.Runner(),
              [f"{no_game}: not the GOG Fate of Atlantis app (no ATLANTIS.001)"]),
         ]
         for name, layout, build, runner, expected in cases:
@@ -109,12 +114,14 @@ class AppTests(unittest.TestCase):
                 self.assertEqual(preflight(layout, build, runner), expected)
 
     def test_verify(self):
-        self.assertEqual(verify(self.layout), [f"{self.layout.hd / 'manifest.json'}: missing; HD backgrounds are not installed"])
+        self.assertEqual(verify(self.layout), [f"{self.layout.hd / 'manifest.json'}: missing; HD backgrounds are not installed",
+                                               f"{self.layout.backup}: missing; uninstall could not restore the original",
+                                               f"{self.layout.binary}: not an arm64 executable"])
         self.install()
         self.assertEqual(verify(self.layout), [])
 
         (self.layout.hd / "room_001.png").write_bytes(b"edited")
-        self.layout.binary.write_bytes(testkit.ARM64_HEADER + b"stock")
+        self.layout.binary.write_bytes(ARM64_HEADER + b"stock")
         self.assertEqual(verify(self.layout), [
             "room_001.png: changed since install",
             f"{self.layout.binary}: not the patched engine",

@@ -50,10 +50,10 @@ struct Fixture {
 
 	std::vector<uint32> compose(const std::vector<byte> &src, int roomX, const Room *r) {
 		Tint tint;
-		buildTint(cur, ref, tint);
+		buildTint(cur, ref, kFmt, tint);
 		const int w = (int)src.size();
 		std::vector<uint32> out(w * kScale * kScale);
-		composeMain(src.data(), w, w, 1, roomX, 0, r, cur, tint, cycling, kFmt, out.data(), w * kScale);
+		composeMain(src.data(), w, w, 1, roomX, 0, r, tint, cycling, kFmt, out.data(), w * kScale);
 		return out;
 	}
 
@@ -82,13 +82,6 @@ static void testUnchangedPaletteGivesExactHD() {
 	CHECK(f.blockIsHD(out, 2, 1, 1), "unchanged palette, column 1");
 }
 
-static void testChangedPixelIsNative() {
-	Fixture f(2);
-	std::vector<uint32> out = f.compose({12, 11}, 0, &f.room);
-	CHECK(blockIs(out, 2, 0, rgb(12, 12, 12)), "an actor pixel is its palette colour");
-	CHECK(f.blockIsHD(out, 2, 1, 1), "the background next to it stays HD");
-}
-
 static void testPaletteChangeTintsHD() {
 	Fixture f(1);
 	// Index 10: red halves, green has a zero reference (takes the current 40),
@@ -100,48 +93,42 @@ static void testPaletteChangeTintsHD() {
 	CHECK(out[0] == rgb(50, 40, 255), "fade ratio, zero-channel guard and clamp");
 }
 
-static void testCyclingIndexIsNative() {
-	Fixture f(1);
-	f.cycling[10] = true;
-	std::vector<uint32> out = f.compose({10}, 0, &f.room);
-	CHECK(blockIs(out, 1, 0, rgb(10, 10, 10)), "a colour-cycling index stays native");
-}
-
 static void testCameraOffset() {
 	Fixture f(3);
 	std::vector<uint32> out = f.compose({11}, 1, &f.room);
 	CHECK(f.blockIsHD(out, 1, 0, 1), "screen column 0 at camera 1 is room column 1");
 }
 
-static void testOutsideTheRoomIsNative() {
-	Fixture f(2);
-	std::vector<uint32> out = f.compose({11}, 5, &f.room);
-	CHECK(blockIs(out, 1, 0, rgb(11, 11, 11)), "a column past the room's width stays native");
-}
-
-static void testNoRoomDataIsNative() {
-	Fixture f(1);
-	std::vector<uint32> out = f.compose({10}, 0, nullptr);
-	CHECK(blockIs(out, 1, 0, rgb(10, 10, 10)), "a room without HD data is a plain 4x upscale");
-}
-
-static void testUpscale() {
-	Fixture f(1);
-	const std::vector<byte> src = {3, 4};
-	std::vector<uint32> out(2 * kScale * kScale);
-	upscale(src.data(), 2, 2, 1, f.cur, kFmt, out.data(), 2 * kScale);
-	CHECK(blockIs(out, 2, 0, rgb(3, 3, 3)) && blockIs(out, 2, 1, rgb(4, 4, 4)), "4x nearest upscale");
+// Every case where a native pixel keeps its palette colour instead of the HD block.
+static void testNativeFallbacks() {
+	struct Case {
+		const char *what;
+		int roomW;       // the fixture's room width
+		byte src;        // the native index shown
+		int roomX;       // the camera
+		int cycling;     // an index to mark colour-cycling, or -1
+		bool withRoom;   // false: no HD data at all
+	};
+	static const Case cases[] = {
+		{"an actor pixel (index differs from the room's)", 2, 12, 0, -1, true},
+		{"a colour-cycling index", 1, 10, 0, 10, true},
+		{"a column past the room's width", 2, 11, 5, -1, true},
+		{"no room data: the verb and text screens, or a room without HD files", 1, 10, 0, -1, false},
+	};
+	for (const Case &c : cases) {
+		Fixture f(c.roomW);
+		if (c.cycling >= 0)
+			f.cycling[c.cycling] = true;
+		std::vector<uint32> out = f.compose({c.src}, c.roomX, c.withRoom ? &f.room : nullptr);
+		CHECK(blockIs(out, 1, 0, rgb(c.src, c.src, c.src)), c.what);
+	}
 }
 
 int main() {
 	testUnchangedPaletteGivesExactHD();
-	testChangedPixelIsNative();
 	testPaletteChangeTintsHD();
-	testCyclingIndexIsNative();
 	testCameraOffset();
-	testOutsideTheRoomIsNative();
-	testNoRoomDataIsNative();
-	testUpscale();
+	testNativeFallbacks();
 	if (failures) {
 		std::printf("%d failure(s)\n", failures);
 		return 1;

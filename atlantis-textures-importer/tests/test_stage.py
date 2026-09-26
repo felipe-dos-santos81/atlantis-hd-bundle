@@ -5,7 +5,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import testkit
-from importer.stage import sha256_file, source_id, stage
+from scumm.manifest import sha256_file
+
+from importer.stage import source_id, stage
 
 
 class StageTests(unittest.TestCase):
