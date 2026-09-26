@@ -251,3 +251,10 @@ Reading the v2026.3.0 sources changed these details; the design is unchanged.
 - GOG's `GOGLauncher` does not start the game on this Mac even with the stock
   engine (found in Task 7); `launch_game.sh` run from `Contents/Resources/game`
   does. Out of scope here; reported to the user.
+- Make targets are named by stage (`engine-build`, `engine-patch`,
+  `hd-validate`, `hd-install`, `hd-verify`, `hd-uninstall`; `install` sets up
+  `.venv`), following the house Makefile style (review, 2026-09-26).
+- Review fixes (2026-09-26): the engine checks each `.idx` against the room's
+  real size; palette changes redraw only the strips showing a changed colour;
+  `_outputPixelFormat` stays CLUT8 in HD mode; effects pass their room
+  position; the build's unsaved-edit check fingerprints what it applied.

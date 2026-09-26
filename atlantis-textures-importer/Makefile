@@ -1,17 +1,19 @@
 # Makefile for atlantis-textures-importer — HD backgrounds in the GOG app
-# Pipeline: env → build → validate → install (→ verify, uninstall)
+# Targets are numbered by pipeline stage:
+#   install → 1 engine-build → 2 hd-validate → 3 hd-install → 4 hd-verify (→ hd-uninstall)
 SERVICE = atlantis-textures-importer
 
 # Variables
 VENV_DIR = .venv
-PYTHON = $(VENV_DIR)/bin/python
-EXPORTER = ../atlantis-textures-exporter
-IMPORTER = PYTHONPATH=.:$(EXPORTER) $(PYTHON) -m importer
-ai ?= $(HOME)/Documents/Indiana Jones and the Fate of Atlantis-ai
-app ?= $(HOME)/Documents/Indiana Jones® and the Fate of Atlantis™.app
-ARGS = --ai "$(ai)" --app "$(app)"
+PYTHON = PYTHONPATH=$$(pwd):$$(pwd)/../atlantis-textures-exporter $(VENV_DIR)/bin/python
+PIP = $(VENV_DIR)/bin/pip
+# Paths default to ~/Documents (importer/cli.py); override with ai="..." app="..."
+PATHS = $(if $(ai),--ai "$(ai)") $(if $(app),--app "$(app)")
 
-.PHONY: help env build patch validate install uninstall verify test test-engine clean
+.PHONY: help install clean \
+        engine-build engine-patch \
+        hd-validate hd-install hd-verify hd-uninstall \
+        test test-engine
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
@@ -22,47 +24,48 @@ help: ## Print this help message
 		awk 'BEGIN {FS = ":.*?## "}; \
 		{printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}'
 
-env: ## Create .venv and install Pillow
+install: ## Initialize .venv and install Pillow
 	@if [ ! -d "$(VENV_DIR)" ]; then \
 		python3 -m venv $(VENV_DIR); \
-		$(VENV_DIR)/bin/pip install -U pip pillow; \
-	fi
-	@echo "Environment ready."
+		$(PIP) install -U pip; \
+		$(PIP) install -U pillow; \
+	fi; \
+	echo "Environment setup complete."
 
-# ── Engine ───────────────────────────────────────────────────────────────────
+clean: ## Remove .venv, build/ and caches (keeps vendor/)
+	rm -rf $(VENV_DIR) build
+	find . -type d -name "__pycache__" -not -path "./vendor/*" -exec rm -rf {} +
+	@echo "Cleanup complete."
 
-build: ## Build the patched ScummVM into vendor/scummvm/ScummVM.app
+# ── Stage 1 · Engine (patched ScummVM v2026.3.0) ─────────────────────────────
+
+engine-build: ## [STEP 1] Build the patched ScummVM into vendor/scummvm/ScummVM.app
 	./scripts/build_scummvm.sh
 
-patch: ## Save the edits in vendor/scummvm to patches/scumm-hd.patch
+engine-patch: ## Save edits to existing ScummVM files in vendor/scummvm to patches/scumm-hd.patch
 	git -C vendor/scummvm diff > patches/scumm-hd.patch
 
-# ── App ──────────────────────────────────────────────────────────────────────
+# ── Stages 2–4 · HD backgrounds in the app ───────────────────────────────────
 
-validate: env ## Check every AI background against the game's rooms
-	$(IMPORTER) validate $(ARGS)
+hd-validate: install ## [STEP 2] Check every AI background against the game's rooms
+	$(PYTHON) -m importer validate $(PATHS)
 
-install: env ## Install the patched ScummVM and the HD backgrounds into the app
-	$(IMPORTER) install $(ARGS)
+hd-install: install ## [STEP 3] Install the patched ScummVM and the HD backgrounds (quit the game first)
+	$(PYTHON) -m importer install $(PATHS)
 
-uninstall: env ## Restore the app's original ScummVM and configfile
-	$(IMPORTER) uninstall $(ARGS)
+hd-verify: install ## [STEP 4] Check the installed engine and HD files
+	$(PYTHON) -m importer verify $(PATHS)
 
-verify: env ## Check the installed engine and HD files
-	$(IMPORTER) verify $(ARGS)
+hd-uninstall: install ## Restore the app's original ScummVM and configfile
+	$(PYTHON) -m importer uninstall $(PATHS)
 
-# ── Development ──────────────────────────────────────────────────────────────
+# ── Development ───────────────────────────────────────────────────────────────
 
-test: env ## Run the Python test suite
-	PYTHONPATH=.:$(EXPORTER) $(PYTHON) -m unittest discover -s tests
+test: install ## Run the Python unit test suite
+	$(PYTHON) -m unittest discover -s tests
 
 test-engine: ## Build and run the compositor core's standalone tests
 	mkdir -p build
 	$(CXX) -std=c++17 -Wall -Wextra -Werror -DHD_COMPOSE_STANDALONE -Iengine \
 		engine/scumm/hd_compose.cpp engine/test_hd_compose.cpp -o build/test_hd_compose
 	./build/test_hd_compose
-
-clean: ## Remove .venv, build/ and caches (keeps vendor/)
-	rm -rf $(VENV_DIR) build
-	find . -type d -name "__pycache__" -not -path "./vendor/*" -exec rm -rf {} +
-	@echo "Cleanup complete."

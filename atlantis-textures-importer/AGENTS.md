@@ -14,7 +14,11 @@
   save sets `_currentRoom` without `startScene`.
 - **Palette changes recompose the screen** (`hdSetPalette`): the backend's
   `setPalette` asserts on a 32-bit screen, and fades loop without a screen
-  update in between.
+  update in between. Only the 8-px strips that show a changed colour (in the
+  game graphics or the text over them) are redrawn, so colour cycling stays
+  cheap; an unchanged palette redraws nothing.
+- **The engine draws 8-bit.** In HD mode `_outputPixelFormat` is CLUT8 (what
+  the engine produces); only `hdBlit` writes the 32-bit screen.
 - **Install never loses the original.** `scummvm.orig` and `configfile.orig`
   are written once and restored by uninstall or by a failed install.
 - **Install edits configfile once:** `engineid=scumm` in `[atlantis]`.
@@ -24,24 +28,27 @@
   Provider re-adds `com.apple.FinderInfo` to bundle folders within a second,
   so `codesign` always refuses; GOG's 2014 seal already fails verification
   and the game runs regardless. The engine keeps the ad-hoc signature from
-  `make build`.
+  `make engine-build`.
 
 ## 2. Modules
 
 | File | Owns | Must not |
 |---|---|---|
-| `engine/scumm/hd_compose.*` | the pixel rule, tint, upscale | know engine state or files |
+| `engine/scumm/hd_compose.*` | the pixel rule, tint, packed colours | know engine state or files |
 | `engine/scumm/hd_background.*` | loading `hd/`, the ScummEngine HD methods | decide the pixel rule |
 | `patches/scumm-hd.patch` | the hooks in existing ScummVM files | hold logic beyond a call |
 | `scripts/build_scummvm.sh` | clone, reset, patch, configure, bundle | edit `vendor/` by hand |
 | `importer/rooms.py` | native rooms, validation | write files |
-| `importer/stage.py` | the `hd/` format and manifest | touch the app |
+| `importer/stage.py` | the `hd/` format and manifest, staging and checking it | touch the app |
 | `importer/app.py` | install, uninstall, verify, rollback, the configfile edit | decode rooms |
 | `importer/cli.py` | argument parsing, the install sequence | hold rules |
 
 Engine work: edit new files in `engine/scumm/`; edit existing ScummVM files
-in `vendor/scummvm/`, then `make patch` before `make build`. The build resets
-`vendor/scummvm` to the tag and refuses to run over unsaved edits.
+in `vendor/scummvm/`, then `make engine-patch` before `make engine-build`.
+The build resets `vendor/scummvm` to the tag. It records a fingerprint of
+what it applied (the diff plus the copied `hd_*` sources) in
+`vendor/.scummvm-applied` and refuses to run when `vendor/scummvm` differs
+from it, so no edit is lost.
 
 The bundle: Homebrew's `libSDL2` is `sdl2-compat`, which dlopens
 `@loader_path/libSDL3.dylib`; `dylibbundler` only follows link-time
@@ -58,16 +65,15 @@ scale factor; the logic lives in `engine/scumm/`.
 |---|---|---|
 | `module.mk` | | builds `hd_background.o`, `hd_compose.o` |
 | `scumm.h` | `ScummEngine` | `_hd`, `hdScale()`, the `hd*`/`effectBlit` declarations |
-| `scumm.cpp` | `init` | `hdInit()` sets up the 4x, 32-bit screen |
+| `scumm.cpp` | `init` | `hdInit()` sets up the 4x, 32-bit screen; `_outputPixelFormat` stays CLUT8 |
 | `scumm.cpp` | `~ScummEngine` | deletes `_hd` |
 | `gfx.cpp` | `drawStripToScreen` | after the text composite, `hdBlit` and return |
-| `gfx.cpp` | `dissolveEffect`, `scrollEffect` | direct blits go through `effectBlit` |
+| `gfx.cpp` | `dissolveEffect`, `scrollEffect` | direct blits go through `effectBlit`, with their room position |
 | `gfx.cpp` | `moveScreen`, `updateScreenShakeEffect` | offsets and shake times `hdScale()` |
 | `palette.cpp` | `updatePalette` | `hdSetPalette` instead of the backend palette |
 | `input.cpp` | mouse events | coordinates divided by `hdScale()` |
 | `saveload.cpp` | post-load `warpMouse` | coordinates times `hdScale()` |
 | `cursor.cpp` | `updateCursor` | `hdUpdateCursor`: 4x, CLUT8, cursor palette |
-| `cursor.cpp` | `setBuiltinCursor` | 1-byte stride though the screen is 32-bit |
 
 ## 4. Testing
 
@@ -92,7 +98,7 @@ for the scummvm pid), never the screen or a screen region.
   (LucasArts logo); without it ScummVM 2026.3.0 quits (`Unknown key "path"!`).
 - Install on the real app: the first attempt failed at `codesign` and rolled
   back to stock (engine, configfile, no `hd/`); without re-signing, install
-  and `make verify` pass.
+  and `make hd-verify` pass.
 - GOG launcher: does not start the game on this Mac, stock or HD (the
   process idles, no window). `launch_game.sh` starts both.
 - Room 4 (title): HD painting at 1280x800 (window 1280x832 with title bar);

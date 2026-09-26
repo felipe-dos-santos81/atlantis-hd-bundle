@@ -1,58 +1,56 @@
 # atlantis-textures-importer
 
 Plays *Indiana Jones and the Fate of Atlantis* from the GOG app with the AI
-room backgrounds from `atlantis-texture-enhancement` in true HD (1280x800).
+backgrounds from `atlantis-texture-enhancement`, in true HD (1280x800).
 
-It builds a patched ScummVM (v2026.3.0, SCUMM engine only, arm64) whose
-output step paints each native pixel as a 4x4 block: the AI painting where
-the pixel still shows the room's own background, the palette colour
-elsewhere (actors, changed objects, text, the verb bar). Palette fades tint
-the painting; colour-cycling pixels stay native. It then swaps that ScummVM
-into the GOG app, with a backup and a one-command uninstall.
+It builds a patched ScummVM (v2026.3.0, SCUMM engine only, arm64). The game
+still runs at 320x200; only the final output changes: each native pixel that
+shows the room's own background becomes the matching 4x4 block of the AI
+painting, and everything else (actors, changed objects, text, the verb bar)
+becomes a 4x4 block of its palette colour. Fades tint the painting;
+colour-cycling pixels stay native. It then swaps that ScummVM into the GOG
+app, with a backup and a one-command uninstall.
 
 **Personal use only.** The art is LucasArts/Disney copyright. Nothing here
 commits game data, art or builds.
 
 ## Requirements
 
-- macOS on Apple silicon, Xcode command line tools
-- Homebrew: `sdl2-compat` (or `sdl2`), `sdl3`, `libpng`, `freetype`, `dylibbundler`
-- Python 3.12 (Pillow is installed by `make env`)
-- `../atlantis-textures-exporter` (its decoder reads the native rooms)
+- macOS on Apple silicon with the Xcode command line tools
+- Homebrew: `sdl2-compat`, `sdl3`, `libpng`, `freetype`, `dylibbundler`
+- Python 3.12 (Pillow is installed by `make install`)
+- `../atlantis-textures-exporter`, whose decoder reads the native rooms
 - The GOG app and the AI folder (`room_NNN.png`, RGB, exactly 4x each room)
 
 ## Usage
 
-    make build        # clone ScummVM v2026.3.0 into vendor/, patch, build, bundle
-    make validate     # check the 96 AI backgrounds against the game's rooms
-    make install      # swap the patched ScummVM and hd/ into the app (quit the game first)
-    make verify       # check the installed engine and HD files
-    make uninstall    # restore the app's original ScummVM and configfile
+    make engine-build   # 1. clone ScummVM into vendor/, patch, build, bundle
+    make hd-validate    # 2. check the 96 AI backgrounds against the game's rooms
+    make hd-install     # 3. install the engine and hd/ into the app (quit the game first)
+    make hd-verify      # 4. check the installed engine and files
+    make hd-uninstall   #    restore the original engine and configfile
 
-Paths default to `~/Documents`; override with
-`make install ai="/path/to/ai" app="/path/to/Indiana Jones® and the Fate of Atlantis™.app"`.
+Paths default to `~/Documents`; override with `ai="..."` and `app="..."`.
 
-`make install` changes nothing unless every room validates. It keeps the
-original ScummVM as `Contents/Resources/game/scummvm.orig` and the original
-`configfile` as `configfile.orig`, and adds `engineid=scumm` to the
-`[atlantis]` target (ScummVM 2026 cannot start GOG's 1.7-era target without
-it). It does not re-sign the app: GOG's own seal already fails verification
-and the game runs regardless, and signing inside iCloud-synced `~/Documents`
-always fails. Rerun `make install` after rebuilding.
+`hd-install` changes nothing unless every room validates. It keeps the
+original engine as `scummvm.orig` and the original `configfile` as
+`configfile.orig`, and adds `engineid=scumm` to `[atlantis]` (ScummVM 2026
+cannot start GOG's older target without it). It does not re-sign the app:
+GOG's own signature already fails verification and the game runs anyway, and
+signing inside iCloud-synced `~/Documents` always fails.
 
 ## Launching
 
-On this Mac, GOG's launcher (double-clicking the app) does not start the
-game, with the stock engine as with this one. Start it with the game's own
-script:
+GOG's launcher (double-clicking the app) does not start the game on this Mac,
+with the stock engine or this one. Use the game's own script:
 
     cd "$HOME/Documents/Indiana Jones® and the Fate of Atlantis™.app/Contents/Resources/game" && ./launch_game.sh
 
 ## Development
 
-    make test         # Python suite (never touches the real app)
-    make test-engine  # standalone tests of the compositor core
+    make test           # Python suite; never touches the real app
+    make test-engine    # standalone tests of the compositor core
 
-New engine files live in `engine/scumm/`; edits to existing ScummVM files
-live in `patches/scumm-hd.patch`. Edit existing files in `vendor/scummvm/`,
-then `make patch` before `make build`. See `AGENTS.md`.
+New engine files live in `engine/scumm/`. Edits to existing ScummVM files
+live in `patches/scumm-hd.patch`: make them in `vendor/scummvm/`, then run
+`make engine-patch` before `make engine-build`. See `AGENTS.md`.
