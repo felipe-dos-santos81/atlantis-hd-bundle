@@ -1,6 +1,6 @@
-# Makefile for atlantis-textures — SCUMM v5 background extraction
+# Makefile for atlantis-textures-exporter — SCUMM v5 background extraction
 # Pipeline: env → extract → verify
-SERVICE = atlantis-textures
+SERVICE = atlantis-textures-exporter
 
 # Variables
 VENV_DIR = .venv

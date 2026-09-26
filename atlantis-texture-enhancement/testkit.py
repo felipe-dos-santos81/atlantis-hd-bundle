@@ -1,8 +1,8 @@
-"""Shared test support: a miniature atlantis-textures output, a rooms.yaml
+"""Shared test support: a miniature atlantis-textures-exporter output, a rooms.yaml
 writer, the ComfyUI and vLLM patch stacks, a fake window renderer, a
 CLI-capture helper, and where the real corpus is.
 
-The real source tree is atlantis-textures' `out/`: indexed/rooms/room_NNN.png
+The real source tree is atlantis-textures-exporter's `out/`: indexed/rooms/room_NNN.png
 in P mode at native size, and manifest.json whose assets[] carry room, file,
 width, height, role and sha256.
 """
@@ -25,13 +25,13 @@ import comfy_client
 import source_tree
 from rooms_file import RoomEntry, save_rooms
 
-# The real corpus: atlantis-textures' output, and its flat placeholder rooms
+# The real corpus: atlantis-textures-exporter's output, and its flat placeholder rooms
 # (kind skip in the shipped rooms.yaml), which have nothing to plan or render.
 REAL_SRC = Path(os.environ.get("ATL_SRC")
-                or Path(__file__).resolve().parent.parent / "atlantis-textures" / "out")
+                or Path(__file__).resolve().parent.parent / "atlantis-textures-exporter" / "out")
 REAL_SKIP_ROOMS = (20, 68, 89, 90, 98)
 needs_real_corpus = unittest.skipUnless((REAL_SRC / "manifest.json").is_file(),
-                                        "the real atlantis-textures output is not present")
+                                        "the real atlantis-textures-exporter output is not present")
 
 
 def real_rooms():
@@ -91,7 +91,7 @@ def indexed_image(pixels, palette=PALETTE):
 
 
 def make_source(root, rooms=DEFAULT_ROOMS):
-    """Write <root>/out like atlantis-textures' `make extract` and return it."""
+    """Write <root>/out like atlantis-textures-exporter's `make extract` and return it."""
     src = Path(root) / "out"
     assets = []
     for spec in rooms:

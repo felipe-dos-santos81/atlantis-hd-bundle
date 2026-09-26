@@ -1,7 +1,7 @@
 """Read and validate the extractor's manifest.json: which rooms exist, their
 native sizes and their files.
 
-The source tree is atlantis-textures' output (`make extract` there):
+The source tree is atlantis-textures-exporter's output (`make extract` there):
 indexed/rooms/room_NNN.png in P mode at native size, and manifest.json whose
 assets[] records carry room, file, width, height, role and sha256. This module
 is its only reader. It never writes: ATL_SRC is read in place.
@@ -92,7 +92,7 @@ def load(root):
     root = Path(root)
     manifest = root / "manifest.json"
     if not manifest.is_file():
-        raise SourceError(f"{manifest}: not found - run make extract in atlantis-textures")
+        raise SourceError(f"{manifest}: not found - run make extract in atlantis-textures-exporter")
     try:
         doc = json.loads(manifest.read_text())
     except ValueError as error:

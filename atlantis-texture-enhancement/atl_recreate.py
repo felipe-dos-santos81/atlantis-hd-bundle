@@ -15,7 +15,7 @@ Human-paced stages, each a subcommand:
   verify    audit the output tree against the manifest, the 4x rule and the
             attempt records
 
-The source tree is atlantis-textures' output; its manifest.json (read by
+The source tree is atlantis-textures-exporter's output; its manifest.json (read by
 source_tree) decides which rooms exist. Services are external: vLLM
 (Qwen/Qwen3.8-27B on :8000) and ComfyUI (:8188) are started by the user; this
 driver only checks that they answer.
@@ -49,7 +49,7 @@ def _env_path(name, default):
     return Path(os.environ.get(name) or default).expanduser()
 
 
-SRC_ROOT = _env_path("ATL_SRC", REPO.parent / "atlantis-textures" / "out")
+SRC_ROOT = _env_path("ATL_SRC", REPO.parent / "atlantis-textures-exporter" / "out")
 DST_ROOT = _env_path("ATL_DST", REPO / "data" / "rooms-ai")
 ROOMS_FILE = _env_path("ATL_ROOMS", REPO / "rooms.yaml")
 REVIEWS_FILE = _env_path("ATL_REVIEWS", REPO / "reviews.yaml")
@@ -697,7 +697,7 @@ def build_parser():
 
     def common(p):
         p.add_argument("--src", type=Path, default=SRC_ROOT,
-                       help="atlantis-textures output: manifest.json and indexed/ "
+                       help="atlantis-textures-exporter output: manifest.json and indexed/ "
                             "(default: %(default)s, or ATL_SRC)")
         p.add_argument("--dst", type=Path, default=DST_ROOT,
                        help="output tree (default: %(default)s, or ATL_DST)")

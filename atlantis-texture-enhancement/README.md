@@ -11,8 +11,8 @@ their native size, with local models:
 - vLLM serving `Qwen/Qwen3.8-27B`, which captions each room before rendering
   and reviews each render afterwards.
 
-Input: `../atlantis-textures/out/` (override with `ATL_SRC`), the output of
-`make extract` in atlantis-textures: indexed room PNGs and `manifest.json`.
+Input: `../atlantis-textures-exporter/out/` (override with `ATL_SRC`), the output of
+`make extract` in atlantis-textures-exporter: indexed room PNGs and `manifest.json`.
 Output: `data/rooms-ai/room_NNN.png` (override with `ATL_DST`).
 
 **Personal use only.** The extracted and regenerated art is LucasArts/Disney

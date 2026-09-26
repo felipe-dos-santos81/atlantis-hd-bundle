@@ -1,4 +1,4 @@
-# atlantis-textures
+# atlantis-textures-exporter
 
 Extracts the visual assets of *Indiana Jones and the Fate of Atlantis* (SCUMM v5,
 GOG/ScummVM build) from `ATLANTIS.001` for AI regeneration. Output is

@@ -17,7 +17,7 @@ and the build plan `docs/superpowers/plans/2026-09-24-atlantis-regeneration.md`.
 
 Rules that must survive any change:
 
-- **The source is atlantis-textures' output**, read in place from `ATL_SRC`.
+- **The source is atlantis-textures-exporter's output**, read in place from `ATL_SRC`.
   `source_tree` is its only reader, and `manifest.json` decides which rooms
   exist. Never write under `ATL_SRC`; never parse paths for meaning.
 - **Re-import-safe means geometry.** Every output is exactly 4x native, RGB,
@@ -178,7 +178,7 @@ Rules:
 - a rule is tested once, at the layer that owns it;
 - a regression test names what it guards.
 
-Two test classes run on the real corpus, whenever `../atlantis-textures/out`
+Two test classes run on the real corpus, whenever `../atlantis-textures-exporter/out`
 (or `ATL_SRC`) exists; `testkit.REAL_SRC`, `testkit.needs_real_corpus` and
 `testkit.real_rooms()` are their one definition of it:
 - `test_room_geometry.RealCorpusTests` pins the measured corpus: 91 plannable
