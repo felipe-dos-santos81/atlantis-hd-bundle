@@ -1,0 +1,103 @@
+diff --git a/engines/scumm/gfx.cpp b/engines/scumm/gfx.cpp
+index bf85f13c..9cb6396c 100644
+--- a/engines/scumm/gfx.cpp
++++ b/engines/scumm/gfx.cpp
+@@ -769,6 +769,11 @@ void ScummEngine::drawStripToScreen(VirtScreen *vs, int x, int width, int top, i
+ 		src = _compositeBuf;
+ 		pitch = width * vs->format.bytesPerPixel;
+ 
++		if (_hd) {
++			hdBlit(vs, _compositeBuf, width, vs->xstart + x, top, x, y, width, height);
++			return;
++		}
++
+ 		if (_game.platform == Common::kPlatformNES) {
+ 			// HACK: This is dirty hack which renders narrow NES rooms centered
+ 			// NES can address negative number strips and that poses problem for
+diff --git a/engines/scumm/module.mk b/engines/scumm/module.mk
+index 2cee05ab..35fe3365 100644
+--- a/engines/scumm/module.mk
++++ b/engines/scumm/module.mk
+@@ -23,6 +23,8 @@ MODULE_OBJS := \
+ 	gfx_nes.o \
+ 	gfx_towns.o \
+ 	gfx.o \
++	hd_background.o \
++	hd_compose.o \
+ 	he/mixer_he.o \
+ 	he/resource_he.o \
+ 	he/script_v60he.o \
+diff --git a/engines/scumm/palette.cpp b/engines/scumm/palette.cpp
+index a3758d7f..30e0e66b 100644
+--- a/engines/scumm/palette.cpp
++++ b/engines/scumm/palette.cpp
+@@ -1730,6 +1730,12 @@ void ScummEngine::updatePalette() {
+ 	_palDirtyMax = -1;
+ 	_palDirtyMin = 256;
+ 
++	if (_hd) {
++		// The backend's palette cannot recolour a 32-bit screen.
++		hdSetPalette(paletteColors, first, num);
++		return;
++	}
++
+ #ifdef USE_RGB_COLOR
+ #ifndef DISABLE_TOWNS_DUAL_LAYER_MODE
+ 	if (_game.platform == Common::kPlatformFMTowns) {
+diff --git a/engines/scumm/scumm.cpp b/engines/scumm/scumm.cpp
+index f0bb1a53..d3eb7742 100644
+--- a/engines/scumm/scumm.cpp
++++ b/engines/scumm/scumm.cpp
+@@ -62,6 +62,7 @@
+ #include "scumm/he/logic_he.h"
+ #include "scumm/he/sound_he.h"
+ #include "scumm/object.h"
++#include "scumm/hd_background.h"
+ #include "scumm/macgui/macgui.h"
+ #include "scumm/players/player_ad.h"
+ #include "scumm/players/player_nes.h"
+@@ -466,6 +467,7 @@ ScummEngine::ScummEngine(OSystem *syst, const DetectorResult &dr)
+ 
+ ScummEngine::~ScummEngine() {
+ 	delete _musicEngine;
++	delete _hd;
+ 
+ 	// Delete the sound object earlier than the actors
+ 	// for HE games, since in SoundHE::stopAllSounds() we
+@@ -1440,6 +1442,8 @@ Common::Error ScummEngine::init() {
+ 		initGraphics(kHercWidth, kHercHeight);
+ 	} else if (_renderMode == Common::kRenderCGA_BW || (_renderMode == Common::kRenderEGA && _supportsEGADithering)) {
+ 		initGraphics(_screenWidth * 2, _screenHeight * 2);
++	} else if (hdInit()) {
++		// HD backgrounds: hdInit() set up a 4x, 32-bit screen.
+ 	} else {
+ 		int screenWidth = _screenWidth;
+ 		int screenHeight = _screenHeight;
+diff --git a/engines/scumm/scumm.h b/engines/scumm/scumm.h
+index ae7b4bb7..41abe9df 100644
+--- a/engines/scumm/scumm.h
++++ b/engines/scumm/scumm.h
+@@ -96,6 +96,7 @@ class MacGui;
+ class MusicEngine;
+ class Player_Towns;
+ class ScummEngine;
++class HDBackground;
+ class ScummDebugger;
+ class Sound;
+ class Localizer;
+@@ -1498,6 +1499,15 @@ protected:
+ 	bool _supportsEGADithering = false;
+ 	bool _enableSegaShadowMode = false;
+ 
++	// HD backgrounds from <game>/hd/ (atlantis-textures-importer); null when off.
++	HDBackground *_hd = nullptr;
++	int hdScale() const { return _hd ? 4 : 1; } // HDCompose::kScale
++	bool hdInit();
++	void hdBlit(VirtScreen *vs, const byte *src, int srcPitch, int roomX, int roomY, int dstX, int dstY, int w, int h);
++	void effectBlit(VirtScreen *vs, const byte *src, int pitch, int x, int y, int w, int h);
++	void hdSetPalette(const byte *colors, int first, int num);
++	void hdUpdateCursor(const byte *cursor, int w, int h, int hotspotX, int hotspotY, uint32 transColor);
++
+ 	virtual void drawDirtyScreenParts();
+ 	void updateDirtyScreen(VirtScreenNumber slot);
+ 	void drawStripToScreen(VirtScreen *vs, int x, int width, int top, int bottom);
