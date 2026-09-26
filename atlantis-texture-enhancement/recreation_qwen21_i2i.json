@@ -1,0 +1,24 @@
+{
+ "prompt": {
+  "1": {"class_type": "LoadImage", "inputs": {"image": "guide.png"}},
+  "2": {"class_type": "LoadImage", "inputs": {"image": "composite.png"}},
+  "3": {"class_type": "LoadImageMask", "inputs": {"image": "mask.png", "channel": "red"}},
+  "4": {"class_type": "CLIPLoader", "inputs": {
+    "clip_name": "qwen3vl_8b_bf16.safetensors", "type": "qwen_image"}},
+  "5": {"class_type": "UNETLoader", "inputs": {
+    "unet_name": "qwen_image_2.1_bf16.safetensors", "weight_dtype": "default"}},
+  "6": {"class_type": "VAELoader", "inputs": {"vae_name": "qwen_image_2.1_vae_bf16.safetensors"}},
+  "7": {"class_type": "DifferentialDiffusion", "inputs": {"model": ["5", 0], "strength": 1.0}},
+  "9": {"class_type": "TextEncodeQwenImage21", "inputs": {
+    "clip": ["4", 0], "vae": ["6", 0], "prompt": "", "negative_prompt": "", "resolution": 0,
+    "images.image_1": ["1", 0]}},
+  "11": {"class_type": "VAEEncode", "inputs": {"pixels": ["2", 0], "vae": ["6", 0]}},
+  "12": {"class_type": "SetLatentNoiseMask", "inputs": {"samples": ["11", 0], "mask": ["3", 0]}},
+  "13": {"class_type": "KSampler", "inputs": {
+    "model": ["7", 0], "seed": 42, "steps": 40, "cfg": 1.0, "sampler_name": "euler",
+    "scheduler": "simple", "positive": ["9", 0], "negative": ["9", 1],
+    "latent_image": ["12", 0], "denoise": 1.0}},
+  "14": {"class_type": "VAEDecode", "inputs": {"samples": ["13", 0], "vae": ["6", 0]}},
+  "15": {"class_type": "SaveImage", "inputs": {"images": ["14", 0], "filename_prefix": "atl"}}
+ }
+}
