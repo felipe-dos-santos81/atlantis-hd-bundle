@@ -67,7 +67,9 @@ class RoomsTests(unittest.TestCase):
         kinds = {kind: sorted(int(key[5:]) for key, entry in rooms.items() if entry.kind == kind)
                  for kind in rf.KINDS}
         self.assertEqual(kinds["skip"], [20, 68, 89, 90, 98])
-        self.assertEqual(kinds["insert"], [8, 9, 47, 70, 75, 83, 84, 85, 86, 87, 88])
+        # room 75, the four-panel map, is a scene: as an insert every window was told
+        # to paint its two labels (AGENTS.md §6)
+        self.assertEqual(kinds["insert"], [8, 9, 47, 70, 83, 84, 85, 86, 87, 88])
 
 
 class ReviewsTests(unittest.TestCase):

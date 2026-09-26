@@ -3367,95 +3367,55 @@ room_074:
 
     INVARIANTS: The hand must hold the vessel in the same orientation (tilted slightly towards the viewer). The relative positions of the bowl (top left) and cup (top right) must remain fixed. The lighting direction and shadow fall-off must match. The specific shape of the vessel's "horns" and ridges is critical. No people other than the single hand/arm are present.
 room_075:
-  kind: insert
+  kind: scene
   caption: >-
-    SCENE: A hand-drawn world map, flat top-down cartographic view. The strip is four separate maps at increasing zoom placed side by side with hard seams: New York State, the North Atlantic, the Mediterranean, and a close-up of Aegean islands above the north coast of Crete. The atmosphere is that of an aged paper chart with no horizon or sky.
+    SCENE: A hand-drawn map on aged paper, flat top-down cartographic view. The strip is four separate maps at increasing zoom placed side by side with hard seams. No horizon or sky.
 
 
-    VIEW: Directly overhead, orthographic, no perspective convergence. The image is four independent map panels; the seams at 0.25, 0.5 and 0.75 are hard cuts, not continuous geography.
+    VIEW: Directly overhead, orthographic, no perspective convergence. The seams at 0.25, 0.5 and 0.75 are hard cuts, not continuous geography.
 
 
-    LAYOUT: Panel 1 (0–0.25): New York State in tan, Lake Ontario upper-left, the Finger Lakes left-centre, the Hudson River, thin state borders, a red-and-black marker labelled "BARNETT COLLEGE" at centre, and a second marker labelled "NEW YORK CITY" at the coast by Long Island; compass rose bottom-left. Panel 2 (0.25–0.5): the North Atlantic, with eastern North America and the Caribbean left, the top of South America bottom-left, Greenland and Iceland top, the Azores as tiny mid-ocean islands, the British Isles, Europe and North Africa right; compass rose bottom-left. Panel 3 (0.5–0.75): the Mediterranean, with Spain left, France and Italy top, Corsica, Sardinia, Sicily, Greece and the Aegean islands, Turkey, the Black Sea top-right, Cyprus, and North Africa below with borders; compass rose bottom-left. Panel 4 (0.75–1): open Aegean sea with scattered small islands along the top, including a crescent-shaped one, and the long north coast of Crete along the bottom edge; compass rose top-left. No occlusion; all elements lie on one plane.
+    LAYOUT: Tan landmasses with dark-brown coastlines and thin brown border lines on flat turquoise water; each panel shows different geography at its own scale, exactly as the reference window draws it. Each panel has one compass rose.
 
 
-    OBJECTS: No doors, windows, furniture or props. Cartographic features only: coastlines, internal border lines (thin brown), lakes, rivers, islands, two red-and-black crosshair location markers (panel 1 only), and four eight-pointed compass roses (one per panel) (tan disc, black spokes, red cardinal points).
+    OBJECTS: No doors, windows, furniture or props. Cartographic features only: coastlines, border lines, lakes, rivers, islands and compass roses. Any small marker or label is kept exactly where the reference window shows one, and none is added where it shows none.
 
 
-    LIGHTING: Flat, even illumination; no cast shadows, no highlights, no dark areas. Exposure is uniform across land and sea.
+    LIGHTING: Flat, even illumination; no cast shadows, no highlights, no dark areas.
 
 
-    PALETTE: Land is warm tan/peach with faint greenish mottling and darker brown contour shading. Coasts carry a thin dark-brown outline ringed by a lighter cyan shallow-water halo. Open water is a flat medium turquoise-blue. Markers are red with black centres. Compass roses are pale gold with black and red.
+    PALETTE: Land is warm tan/peach with faint greenish mottling and darker brown contour shading. Coasts carry a thin dark-brown outline ringed by a lighter cyan shallow-water halo. Open water is a flat medium turquoise-blue. Compass roses are pale gold with black and red.
 
 
-    TEXT: "BARNETT COLLEGE" (panel 1 centre, just above and right of its marker). "NEW YORK CITY" (panel 1 lower right, just below and right of its coastal marker). Both in a small pixelated serif, dark brown. No other legible lettering. Panels 2, 3 and 4 have no markers and no lettering at all; the two labels and their markers exist only in panel 1.
+    TEXT: none to add; copy only what the reference window shows.
 
 
-    INVARIANTS: Preserve the exact positions and shapes of every coastline, the relative placement of the two named markers and their labels, the number and locations of the four compass roses, the internal border lines, and the consistent coast-outline-plus-shallow-halo treatment. Keep the four panels as separate maps with hard seams at 0.25, 0.5 and 0.75; do not blend geography across the seams. Ambiguity: precise national borders are stylised and not geographically accurate—repaint them as drawn, not as real geography. No people are present.
+    INVARIANTS: Preserve the exact positions and shapes of every coastline, border line and compass rose. Keep the panels as separate maps with hard seams; do not blend geography across them. Borders are stylised; repaint them as drawn, not as real geography. No people.
 room_076:
   kind: scene
   caption: >-
-    SCENE: Exterior jungle overlook. A grassy plateau meets a steep drop-off, with a distant mountain range and hazy valley below. On the far right is a stepped stone pyramid ruin partially overgrown with vines. The atmosphere is bright, humid, and tropical.
+    SCENE: Exterior tropical jungle panorama in bright daylight: dirt track and hillside, dense rainforest, a misty valley seen through a gap in the trees, and open sunlit grass with ruins. Humid and tropical.
 
 
-    VIEW: Eye-level perspective looking across the plateau toward the drop-off and pyramid. Wide horizontal framing.
+    VIEW: Eye-level side view, wide horizontal framing.
 
 
-    LAYOUT:
-
-    - **Left (0.0–0.3):** A dirt track curves from the upper left across a grassy clearing. A grey-green jeep facing the viewer sits on the track at x≈0.08, y≈0.75. Behind the road rises a steep, rocky green hillside.
-
-    - **Center-Left (0.2–0.5):** Dense foreground foliage dominates. Several large tree trunks rise vertically; one prominent trunk stands at x≈0.4, y≈0.8. Branches and leaves arch overhead, creating a canopy that frames the view.
-
-    - **Center (0.5–0.65):** A gap in the trees reveals the background: a deep ravine or valley with misty blue-grey mountains in the distance. A single hanging vine drops vertically at x≈0.55.
-
-    - **Right (0.65–1.0):** An open grassy area. A curved, light-barked tree stands at x≈0.75, y≈0.6. To its right, a low stone wall runs horizontally at x≈0.85, y≈0.7. Further right is the base of the pyramid structure. In the immediate right foreground (x≈0.9, y≈0.8), a wooden kiosk stands on the grass.
+    LAYOUT: From left to right the room passes from a dirt track below a steep green hillside, through dense foreground foliage with large tree trunks and an arching canopy, to a gap in the trees revealing a deep valley with misty blue-grey mountains, and then to an open grassy plateau with a curved light-barked tree. Vehicles, buildings, ruins, walls and stalls appear only where the reference window shows them; a window that shows only jungle, valley or grass gets only jungle, valley or grass.
 
 
-    OBJECTS:
-
-    - **Jeep:** Parked on the dirt track, facing the viewer.
-
-    - **Kiosk:** Wooden structure with a flat roof and hanging items. Located in the right foreground.
-
-    - **Pyramid:** Stepped stone ziggurat in the right background, covered in patches of green vegetation.
-
-    - **Stone Wall:** Low retaining wall in front of the pyramid base.
-
-    - **Trees:** Multiple species including broadleaf jungle trees and palm-like fronds on the left.
+    OBJECTS: Whatever man-made object the reference window shows, at its exact place and size; nothing man-made is added anywhere else.
 
 
-    LIGHTING: Bright daylight from above. Shadows fall directly beneath objects (jeep, kiosk, trees). The interior of the tree canopy is significantly darker than the open sky and sunlit grass.
+    LIGHTING: Bright daylight from above. Shadows fall directly beneath objects and trees. The interior of the tree canopy is much darker than the open sky and sunlit grass.
 
 
-    PALETTE:
-
-    - **Foliage:** Various shades of vibrant green, dark forest green for shadows, and yellow-green for highlights.
-
-    - **Sky:** Pale blue with soft white clouds.
-
-    - **Background Mountains:** Hazy blue-grey.
-
-    - **Ground:** Bright lime green grass; tan dirt track.
-
-    - **Architecture:** Tan and brown stone for the pyramid; reddish-brown wood for the kiosk.
+    PALETTE: Vibrant greens, dark forest green in shadow, yellow-green highlights; pale blue sky with soft white clouds; hazy blue-grey distant mountains; bright lime grass; tan dirt; tan and brown stone; reddish-brown wood.
 
 
-    TEXT: "Trinkets" appears in white serif font on the upper signboard of the wooden kiosk in the right foreground.
+    TEXT: none to add; copy only what the reference window shows.
 
 
-    INVARIANTS:
-
-    - The jeep must remain on the left road.
-
-    - There is exactly one kiosk, at the far right (x≈0.9–0.98). The jungle and grass from x≈0.1 to x≈0.85 hold no kiosk, signpost, stairs, ruin or other man-made object.
-
-    - The pyramid must be visible in the right background behind the stone wall.
-
-    - The central gap in the trees must reveal the distant valley/mountains.
-
-    - The canopy must frame the top of the scene without blocking the central view.
-
-    - No people are present in the background.
+    INVARIANTS: The central gap in the trees reveals the distant valley and mountains. The canopy frames the top of the scene without blocking the central view. No people.
 room_077:
   kind: scene
   caption: >-

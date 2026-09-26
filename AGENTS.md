@@ -292,3 +292,25 @@ At 1.0, room 29's second window invented a flower stall and a gate (edge
 look changes all at once between 0.95 and 1.0, and without the reference
 image nothing holds the layout, even at 0.9. The user chose denoise 1.0, with retries on new seeds and one
 attempt at 0.9 for a room still rejected after `MAX_ATTEMPTS`.
+
+**Full run (2026-09-25, GB10).** 91 rooms rendered, 5 copied (`skip`).
+- **Geometry gate:** at denoise 1.0 it rejected 45 of 87 first attempts, mostly
+  shifts of a few pixels. New seeds promoted 30 of them by the fourth attempt,
+  and the 0.9 fallback promoted the other 17.
+- **Review:** it rejected 10 promoted rooms. One rejection was false: room 27's
+  source has two figures, and the review counted one. It was accepted by hand.
+- **Caption leak:** wide rooms were painted with objects from other windows,
+  because every window gets the whole caption and, for an insert, the whole
+  lettering. Examples: room 41's deck gun, room 75's map labels, room 76's
+  kiosk and pyramid.
+  - Room 41 was fixed by stating where its gun is and that the deck elsewhere
+    is bare.
+  - Room 75 is a `scene` now, so its windows no longer get the lettering
+    rule.
+  - Rooms 75 and 76 have captions that name no far-end object. A caption
+    rewrite also needs the room's review entry cleared: the old issues
+    quote the leaked names and go back into every window as corrections.
+  - After that, room 76 was accepted. Room 75's layout came out right, but the
+    repaint spelled its labels "COLLESE" and "NEN YORK": a `scene` has no
+    lettering rule. The review rejected it for that. 95 of 96 rooms are
+    accepted.
