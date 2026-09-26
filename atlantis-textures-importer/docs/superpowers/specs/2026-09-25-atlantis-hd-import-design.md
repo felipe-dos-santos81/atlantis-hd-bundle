@@ -30,7 +30,7 @@ data patch.
 | Question | Decision |
 |---|---|
 | Outcome | True HD play: a patched, arm64-native ScummVM that shows the 4x RGB backgrounds. No native-resolution data patch. |
-| Install target | The GOG `.app` in place, with a backup of the bundled ScummVM, a one-command uninstall, and an ad-hoc re-sign. |
+| Install target | The GOG `.app` in place, with a backup of the bundled ScummVM, a one-command uninstall, and no re-signing of the outer app (§5.1). |
 | Objects (object images drawn over the room) | Stay native, upscaled 4x nearest. Object pixels identical to the pristine background under them show HD anyway (a property of the compositor, §4.2). HD objects are a later milestone; the per-room data format leaves room for them. |
 | Engine base | ScummVM tag `v2026.3.0`, only the SCUMM engine enabled. |
 | Approach | An output-stage compositor (§4). Running the engine at 4x internally, or a backend/shader post-process, were rejected: the first touches masks, strips and scrolling engine-wide; the second needs the same engine hooks plus more plumbing. |
@@ -146,8 +146,13 @@ Performance: only dirty strips are composed; a full frame is 1280x800x4 bytes.
    original; it replaces the current build instead). Copy
    `game/game/configfile` to `configfile.orig` the same way. Copy the new
    `ScummVM.app` to `game/scummvm`, move the staged `hd/` to `game/game/hd`,
-   remove `com.apple.quarantine`, run `codesign --force --deep -s -` on the
-   app.
+   remove `com.apple.quarantine`. The outer app is not re-signed: GOG's
+   2014 seal already fails modern verification and the app still launches;
+   the engine keeps the ad-hoc signature `make build` gives it; and in
+   iCloud-synced `~/Documents`, File Provider re-adds `com.apple.FinderInfo`
+   to bundle folders within a second, so `codesign` always refuses
+   ("resource fork, Finder information, or similar detritus not allowed").
+   Not signing also lets uninstall leave GOG's signature untouched.
 5. **Launcher.** `launch_game.sh` is not edited. It runs
    `../scummvm/Contents/MacOS/scummvm`, so the new bundle keeps that
    executable path (`make build` renames the binary if needed).
@@ -168,8 +173,8 @@ this Mac today, and ScummVM 2026.x loads 2.0 saves.
 ### 5.3 `make uninstall`
 
 Refuse while the game is running. Restore `scummvm.orig` and
-`configfile.orig`, delete `game/game/hd`, re-sign. On a stock app it changes
-nothing and does not re-sign. Prints what it did.
+`configfile.orig`, delete `game/game/hd`. On a stock app it changes
+nothing. Prints what it did.
 
 ### 5.4 `make verify`
 
@@ -195,7 +200,7 @@ screen; the missing-room fallback (no room data).
 ### 6.2 Importer
 
 Tests build a miniature fake game and AI folder, and a fake `.app` tree in a
-temporary directory; `codesign`, `xattr` and `pgrep` go through an injected
+temporary directory; `xattr` and `pgrep` go through an injected
 runner that records calls. They never touch the real app.
 
 - `validate`: one `subTest` table: missing, wrong size, not RGB, decode
@@ -241,3 +246,8 @@ Reading the v2026.3.0 sources changed these details; the design is unchanged.
 - `make verify` checks the binary's header and engine marker instead of
   running `--version` (§5.4); no `pyproject.toml` (the importer needs only
   Pillow, installed by `make env`).
+- The outer app is not re-signed (§5.1): signing fails in iCloud-synced
+  `~/Documents`, and GOG's own seal was already invalid (found in Task 7).
+- GOG's `GOGLauncher` does not start the game on this Mac even with the stock
+  engine (found in Task 7); `launch_game.sh` run from `Contents/Resources/game`
+  does. Out of scope here; reported to the user.

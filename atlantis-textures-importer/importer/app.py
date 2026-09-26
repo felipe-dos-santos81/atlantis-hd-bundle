@@ -90,12 +90,6 @@ def preflight(layout: AppLayout, build: Path | None, runner: Runner | None) -> l
     return problems
 
 
-def _sign(layout: AppLayout, runner: Runner) -> None:
-    result = runner(["codesign", "--force", "--deep", "--sign", "-", str(layout.app)])
-    if result.returncode:
-        raise InstallError(f"codesign failed: {result.stderr.strip()}")
-
-
 def _restore(layout: AppLayout) -> bool:
     """Put the stock engine, configfile and data back; True when anything changed."""
     changed = False
@@ -131,7 +125,11 @@ def install(layout: AppLayout, build: Path, staged_hd: Path, runner: Runner, log
             shutil.rmtree(layout.hd)
         staged_hd.rename(layout.hd)
         runner(["xattr", "-dr", "com.apple.quarantine", str(layout.app)])  # an absent attribute is fine
-        _sign(layout, runner)
+        # No re-signing: the engine keeps the ad-hoc signature it got at build
+        # time, GOG's own 2014 seal already fails modern verification and the
+        # app launches regardless, and signing inside iCloud-synced ~/Documents
+        # fails (File Provider re-adds com.apple.FinderInfo). Not signing also
+        # lets uninstall restore GOG's signature untouched.
     except Exception as error:
         _restore(layout)
         if isinstance(error, InstallError):
@@ -144,7 +142,6 @@ def uninstall(layout: AppLayout, runner: Runner, log=print) -> None:
     if _running(layout, runner):
         raise InstallError("the game is running; quit it first")
     if _restore(layout):
-        _sign(layout, runner)
         log(f"restored the original ScummVM and configfile, removed {layout.hd}")
     else:
         log("nothing installed; the app is stock")

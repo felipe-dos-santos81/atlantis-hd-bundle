@@ -40,13 +40,13 @@ class AppTests(unittest.TestCase):
         self.assertEqual(self.layout.binary.read_bytes(), (self.build / "Contents/MacOS/scummvm").read_bytes())
         self.assertEqual((self.layout.backup / "Contents/MacOS/scummvm").read_bytes(), testkit.STOCK_BINARY)
         self.assertTrue((self.layout.hd / "manifest.json").is_file())
-        self.assertEqual(runner.programs(), ["xattr", "codesign"])
+        self.assertEqual(runner.programs(), ["xattr"])  # never re-signs: GOG's signature stays as it was
 
         self.layout.config.write_text("[scummvm]\nversioninfo=2026.3.0\n")  # ScummVM rewrites it on exit
         runner = testkit.Runner()
         self.uninstall(runner)
         self.assertEqual(testkit.snapshot(self.app), self.stock)
-        self.assertEqual(runner.programs(), ["pgrep", "codesign"])
+        self.assertEqual(runner.programs(), ["pgrep"])
 
     def test_reinstall_keeps_the_original_backup(self):
         self.install()
@@ -74,9 +74,10 @@ class AppTests(unittest.TestCase):
             self.install()
         self.assertEqual(testkit.snapshot(self.app), stock)
 
-    def test_failed_signing_rolls_back_to_stock(self):
-        with self.assertRaisesRegex(InstallError, "codesign failed"):
-            self.install(testkit.Runner(fail={"codesign": 1}))
+    def test_a_failed_copy_rolls_back_to_stock(self):
+        self.build = self.root / "missing.app"
+        with self.assertRaisesRegex(InstallError, "rolled back"):
+            self.install()
         self.assertEqual(testkit.snapshot(self.app), self.stock)
 
     def test_uninstall_refuses_while_running(self):
