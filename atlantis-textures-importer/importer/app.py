@@ -61,6 +61,20 @@ class AppLayout:
         return self.data / "configfile.orig"
 
 
+def with_engine_id(config: str) -> str:
+    """GOG's configfile (written by ScummVM 1.7) has no engineid in its
+    [atlantis] target; ScummVM 2026 cannot upgrade the target without it."""
+    lines = config.splitlines(keepends=True)
+    start = next((i for i, line in enumerate(lines) if line.strip() == "[atlantis]"), None)
+    if start is None:
+        raise InstallError("configfile has no [atlantis] target")
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].lstrip().startswith("[")), len(lines))
+    if any(line.split("=", 1)[0].strip() == "engineid" for line in lines[start + 1:end]):
+        return config
+    lines.insert(start + 1, "engineid=scumm\n")
+    return "".join(lines)
+
+
 def _running(layout: AppLayout, runner: Runner) -> bool:
     return runner(["pgrep", "-f", str(layout.binary)]).returncode == 0
 
@@ -111,6 +125,7 @@ def install(layout: AppLayout, build: Path, staged_hd: Path, runner: Runner, log
             layout.engine.rename(layout.backup)
         if not layout.config_backup.exists():
             shutil.copy2(layout.config, layout.config_backup)
+        layout.config.write_bytes(with_engine_id(layout.config.read_bytes().decode()).encode())
         shutil.copytree(build, layout.engine, symlinks=True)
         if layout.hd.exists():
             shutil.rmtree(layout.hd)

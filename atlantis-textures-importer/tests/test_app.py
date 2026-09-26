@@ -60,6 +60,20 @@ class AppTests(unittest.TestCase):
         self.assertEqual((self.layout.backup / "Contents/MacOS/scummvm").read_bytes(), testkit.STOCK_BINARY)
         self.assertEqual(verify(self.layout), [])
 
+    def test_install_adds_the_engine_id_once(self):
+        # ScummVM 2026 cannot upgrade GOG's 1.7-era [atlantis] target without it.
+        self.install()
+        self.install()
+        self.assertEqual(self.layout.config.read_text(),
+                         "[scummvm]\nversioninfo=1.7.0\n\n[atlantis]\nengineid=scumm\ngameid=atlantis\n")
+
+    def test_a_configfile_without_the_target_rolls_back(self):
+        self.layout.config.write_text("[scummvm]\nversioninfo=1.7.0\n")
+        stock = testkit.snapshot(self.app)
+        with self.assertRaisesRegex(InstallError, r"no \[atlantis\] target"):
+            self.install()
+        self.assertEqual(testkit.snapshot(self.app), stock)
+
     def test_failed_signing_rolls_back_to_stock(self):
         with self.assertRaisesRegex(InstallError, "codesign failed"):
             self.install(testkit.Runner(fail={"codesign": 1}))

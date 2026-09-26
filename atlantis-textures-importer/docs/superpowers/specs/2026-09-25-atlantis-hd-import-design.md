@@ -157,9 +157,12 @@ partial `hd/`, and exit non-zero.
 
 ### 5.2 Config and saves
 
-The importer does not edit `configfile` (it has `aspect_ratio=false`, which
-suits 1280x800), but ScummVM 2026.x rewrites it on exit; hence the
-`configfile.orig` backup. Saves use ScummVM's default folder; none exist on
+ScummVM 2026.x cannot start GOG's `configfile` as is: its 1.7-era
+`[atlantis]` target has no `engineid`, and upgrading it fails (`Unknown key
+"path"!`). Install adds `engineid=scumm` to `[atlantis]` (once; user decision
+2026-09-26) and changes nothing else (`aspect_ratio=false` suits 1280x800).
+ScummVM 2026.x also rewrites the file on exit; hence the `configfile.orig`
+backup, which uninstall restores. Saves use ScummVM's default folder; none exist on
 this Mac today, and ScummVM 2026.x loads 2.0 saves.
 
 ### 5.3 `make uninstall`
@@ -232,7 +235,9 @@ Reading the v2026.3.0 sources changed these details; the design is unchanged.
   asserts on a 32-bit screen; the cursor gets its own palette (§4.3).
 - Dissolve and scroll transitions, `moveScreen` and the built-in cursor's
   stride needed HD handling (§4.3).
-- `configfile` is backed up and restored, because ScummVM rewrites it (§5).
+- `configfile` is backed up and restored, because ScummVM rewrites it, and
+  install adds `engineid=scumm` to `[atlantis]`, without which ScummVM
+  2026.x cannot start the GOG target (§5.2; found in Task 6, user decision).
 - `make verify` checks the binary's header and engine marker instead of
   running `--version` (§5.4); no `pyproject.toml` (the importer needs only
   Pillow, installed by `make env`).

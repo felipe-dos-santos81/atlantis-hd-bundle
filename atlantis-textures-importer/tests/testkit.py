@@ -44,7 +44,7 @@ def make_app(root: Path) -> Path:
     (game / "scummvm/Contents/MacOS/scummvm").write_bytes(STOCK_BINARY)
     (game / "game").mkdir()
     (game / "game/ATLANTIS.001").write_bytes(b"game data")
-    (game / "game/configfile").write_text("[scummvm]\nversioninfo=1.7.0\n")
+    (game / "game/configfile").write_text("[scummvm]\nversioninfo=1.7.0\n\n[atlantis]\ngameid=atlantis\n")
     (game / "launch_game.sh").write_text("#!/bin/bash\n")
     return app
 
