@@ -312,5 +312,5 @@ attempt at 0.9 for a room still rejected after `MAX_ATTEMPTS`.
     quote the leaked names and go back into every window as corrections.
   - After that, room 76 was accepted. Room 75's layout came out right, but the
     repaint spelled its labels "COLLESE" and "NEN YORK": a `scene` has no
-    lettering rule. The review rejected it for that. 95 of 96 rooms are
-    accepted.
+    lettering rule. The review rejected it for that; the user accepted it
+    anyway, so all 96 rooms are done.
