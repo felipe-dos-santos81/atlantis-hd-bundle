@@ -28,7 +28,7 @@
   Provider re-adds `com.apple.FinderInfo` to bundle folders within a second,
   so `codesign` always refuses; GOG's 2014 seal already fails verification
   and the game runs regardless. The engine keeps the ad-hoc signature from
-  `make engine-build`.
+  `make importer-engine-build`.
 
 ## 2. Modules
 
@@ -44,7 +44,7 @@
 | `importer/cli.py` | argument parsing, the install sequence | hold rules |
 
 Engine work: edit new files in `engine/scumm/`; edit existing ScummVM files
-in `vendor/scummvm/`, then `make engine-patch` before `make engine-build`.
+in `vendor/scummvm/`, then `make importer-engine-patch` before `make importer-engine-build`.
 The build resets `vendor/scummvm` to the tag. It records a fingerprint of
 what it applied (the diff plus the copied `hd_*` sources) in
 `vendor/.scummvm-applied` and refuses to run when `vendor/scummvm` differs
@@ -77,8 +77,8 @@ scale factor; the logic lives in `engine/scumm/`.
 
 ## 4. Testing
 
-    make test         # unittest discover: every tests/test_*.py
-    make test-engine  # engine/test_hd_compose.cpp
+    make importer-test         # unittest discover: every tests/test_*.py
+    make importer-test-engine  # engine/test_hd_compose.cpp
 
 Tests never touch the real app. `tests/testkit.py` is the one shared
 test-support module: `make_rooms`, `write_ai`, `make_app` (named like the
@@ -98,7 +98,7 @@ for the scummvm pid), never the screen or a screen region.
   (LucasArts logo); without it ScummVM 2026.3.0 quits (`Unknown key "path"!`).
 - Install on the real app: the first attempt failed at `codesign` and rolled
   back to stock (engine, configfile, no `hd/`); without re-signing, install
-  and `make hd-verify` pass.
+  and `make importer-hd-verify` pass.
 - GOG launcher: does not start the game on this Mac, stock or HD (the
   process idles, no window). `launch_game.sh` starts both.
 - Room 4 (title): HD painting at 1280x800 (window 1280x832 with title bar);

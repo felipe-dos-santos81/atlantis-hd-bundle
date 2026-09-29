@@ -18,21 +18,23 @@ commits game data, art or builds.
 
 - macOS on Apple silicon with the Xcode command line tools
 - Homebrew: `sdl2-compat`, `sdl3`, `libpng`, `freetype`, `dylibbundler`
-- Python 3.12 (Pillow is installed by `make install`)
+- Python 3.12 (Pillow is installed by `make importer-install`)
 - `../atlantis-textures-exporter`, whose decoder reads the native rooms
 - The GOG app and the AI folder (`room_NNN.png`, RGB, exactly 4x each room)
 
 ## Usage
 
-    make engine-build   # 1. clone ScummVM into vendor/, patch, build, bundle
-    make hd-validate    # 2. check the 96 AI backgrounds against the game's rooms
-    make hd-install     # 3. install the engine and hd/ into the app (quit the game first)
-    make hd-verify      # 4. check the installed engine and files
-    make hd-uninstall   #    restore the original engine and configfile
+Run these from the repository root:
+
+    make importer-engine-build   # 1. clone ScummVM into vendor/, patch, build, bundle
+    make importer-hd-validate    # 2. check the 96 AI backgrounds against the game's rooms
+    make importer-hd-install     # 3. install the engine and hd/ into the app (quit the game first)
+    make importer-hd-verify      # 4. check the installed engine and files
+    make importer-hd-uninstall   #    restore the original engine and configfile
 
 Paths default to `~/Documents`; override with `ai="..."` and `app="..."`.
 
-`hd-install` changes nothing unless every room validates. It keeps the
+`importer-hd-install` changes nothing unless every room validates. It keeps the
 original engine as `scummvm.orig` and the original `configfile` as
 `configfile.orig`, and adds `engineid=scumm` to `[atlantis]` (ScummVM 2026
 cannot start GOG's older target without it). It does not re-sign the app:
@@ -48,9 +50,9 @@ with the stock engine or this one. Use the game's own script:
 
 ## Development
 
-    make test           # Python suite; never touches the real app
-    make test-engine    # standalone tests of the compositor core
+    make importer-test         # Python suite; never touches the real app
+    make importer-test-engine  # standalone tests of the compositor core
 
 New engine files live in `engine/scumm/`. Edits to existing ScummVM files
 live in `patches/scumm-hd.patch`: make them in `vendor/scummvm/`, then run
-`make engine-patch` before `make engine-build`. See `AGENTS.md`.
+`make importer-engine-patch` before `make importer-engine-build`. See `AGENTS.md`.

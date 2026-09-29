@@ -1,7 +1,7 @@
 """Read and write rooms.yaml and reviews.yaml.
 
 rooms.yaml is hand-owned: one entry per manifest room, keyed room_NNN, with a
-`kind` (scene, insert or skip) and a `caption` that `make caption` fills and
+`kind` (scene, insert or skip) and a `caption` that `make enhancer-caption` fills and
 the user edits. reviews.yaml is machine-written: one verdict per room on its
 latest judged attempt, from the VLM review (`source: review`) or from batch's
 geometry gate (`source: geometry`).

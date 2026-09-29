@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run the Atlantis regeneration driver: forwards every argument to atl_recreate.py
 # (caption | batch | review | verify, plus their options). Prefers the project
-# venv (.venv, made by make install), then PYTHON, then python3; the interpreter
+# venv (.venv, made by make enhancer-install), then PYTHON, then python3; the interpreter
 # needs Pillow, PyYAML and numpy.
 set -euo pipefail
 
@@ -13,7 +13,7 @@ fi
 PY="${PY:-${PYTHON:-python3}}"
 
 "$PY" -c 'import PIL, yaml, numpy' 2>/dev/null || {
-  echo "error: $PY lacks Pillow, PyYAML or numpy - run: make install" >&2
+  echo "error: $PY lacks Pillow, PyYAML or numpy - run: make enhancer-install" >&2
   exit 1
 }
 

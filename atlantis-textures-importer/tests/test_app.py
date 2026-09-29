@@ -105,7 +105,7 @@ class AppTests(unittest.TestCase):
             ("ready", self.layout, self.build, testkit.Runner(), []),
             ("running", self.layout, self.build, testkit.Runner(running=True), [GAME_RUNNING]),
             ("not built", self.layout, self.root / "nowhere.app", testkit.Runner(),
-             [f"{self.root / 'nowhere.app'}: no built ScummVM; run make engine-build"]),
+             [f"{self.root / 'nowhere.app'}: no built ScummVM; run make importer-engine-build"]),
             ("not the game", AppLayout(no_game), self.build, testkit.Runner(),
              [f"{no_game}: not the GOG Fate of Atlantis app (no ATLANTIS.001)"]),
         ]

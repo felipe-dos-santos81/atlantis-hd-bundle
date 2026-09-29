@@ -7,17 +7,19 @@ re-import-safe: indexed 8-bit PNGs at native size with the exact game palette.
 ## Requirements
 
 - Python 3.12
-- Pillow (installed by `make install`)
+- Pillow (installed by `make exporter-install`)
 
 ## Quick start
 
-    make install     # create .venv and install Pillow + pytest
-    make extract     # write PNGs to out/ (reads the installed game bundle by default)
-    make test        # run the pytest suite
+Run these from the repository root:
+
+    make exporter-install   # create .venv and install Pillow + pytest
+    make exporter-extract   # write PNGs to out/ (reads the installed game bundle by default)
+    make exporter-test      # run the pytest suite
 
 Override the game directory or output path:
 
-    make extract game="/path/to/game" out=out
+    make exporter-extract game="/path/to/game" out=out
 
 ## Output
 

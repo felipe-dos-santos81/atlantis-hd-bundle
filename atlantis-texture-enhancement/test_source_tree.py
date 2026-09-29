@@ -64,7 +64,7 @@ class SourceTreeTests(unittest.TestCase):
         with self.assertRaisesRegex(SourceError, "invalid JSON"):
             source_tree.load(self.src)
         (self.src / "manifest.json").unlink()
-        with self.assertRaisesRegex(SourceError, "run make extract"):
+        with self.assertRaisesRegex(SourceError, "run make exporter-extract"):
             source_tree.load(self.src)
 
     def test_select(self):

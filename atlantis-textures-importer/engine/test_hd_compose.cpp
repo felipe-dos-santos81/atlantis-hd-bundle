@@ -1,4 +1,4 @@
-// Standalone tests of the HD compositor core. Build and run: make test-engine
+// Standalone tests of the HD compositor core. Build and run: make importer-test-engine
 #include <cstdio>
 #include <cstring>
 #include <vector>

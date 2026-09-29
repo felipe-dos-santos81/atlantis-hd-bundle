@@ -153,8 +153,8 @@ Render one room through any new or edited graph before trusting it.
 ## 5. Testing
 
 ```bash
-make check   # py_compile every module
-make test    # unittest discover: every test_*.py
+make enhancer-check   # py_compile every module
+make enhancer-test    # unittest discover: every test_*.py
 ```
 
 Tests never touch the network or the GPU. `testkit.py` is the one shared
@@ -206,7 +206,7 @@ failures. Five captions needed a hand correction against the room image:
 
 Read every caption before a batch.
 
-**Full caption run (2026-09-25).** `make caption` captioned the other 84 rooms
+**Full caption run (2026-09-25).** `make enhancer-caption` captioned the other 84 rooms
 in about 3 h with no failures. A read against each room image changed 61 of
 them (205 substring fixes). The common failures:
 - misread objects: a taxi as a police car, a submarine conning tower as a sea

@@ -1,0 +1,20 @@
+# Shared
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+.superpowers/
+
+# atlantis-textures-exporter
+/atlantis-textures-exporter/out/
+
+# atlantis-texture-enhancement
+/atlantis-texture-enhancement/data/
+/atlantis-texture-enhancement/reviews.yaml
+/atlantis-texture-enhancement/**/*.tmp
+/atlantis-texture-enhancement/**/*.pending
+
+# atlantis-textures-importer
+/atlantis-textures-importer/vendor/
+/atlantis-textures-importer/build/

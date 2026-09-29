@@ -90,7 +90,7 @@ def preflight(layout: AppLayout, build: Path, runner: Runner) -> list[str]:
     """Everything install needs before it touches the app."""
     problems = check_game(layout)
     if not (build / BUNDLE_BINARY).is_file():
-        problems.append(f"{build}: no built ScummVM; run make engine-build")
+        problems.append(f"{build}: no built ScummVM; run make importer-engine-build")
     if _running(layout, runner):
         problems.append(GAME_RUNNING)
     return problems

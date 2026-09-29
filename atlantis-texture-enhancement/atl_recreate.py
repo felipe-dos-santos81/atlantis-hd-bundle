@@ -173,7 +173,7 @@ def cmd_verify(args):
         elif (entries[room.key].kind != "skip" and promoted_record(
                 audit_dir(args.dst, room), source_tree.file_sha256(dst)) is None):
             code, detail = "UNRECORDED", ("no attempt record promoted this file - "
-                                          f"run: make batch room={room.number} force=1")
+                                          f"run: make enhancer-batch room={room.number} force=1")
         else:
             continue
         bad += 1
@@ -373,7 +373,7 @@ def comfy_preflight(workflow, no_memory_check):
     """None when ComfyUI answers, has the model files, knows the node classes
     and there is memory to render; else fail(...)'s exit code."""
     if not comfy_client.is_up(COMFY_URL):
-        return fail(f"ComfyUI is not answering at {COMFY_URL} - start it first (make server)")
+        return fail(f"ComfyUI is not answering at {COMFY_URL} - start it first (make enhancer-server)")
     missing = comfy_client.missing_model_files(workflow, COMFY_DIR)
     if missing:
         return fail(f"ComfyUI is missing model files under {COMFY_DIR}:\n  " + "\n  ".join(missing))
@@ -467,7 +467,7 @@ def plan_line(args, room, entry, corrections):
     if corrections:
         extras.append(f"{len(corrections)} correction(s)")
     if not captioned:
-        extras.append("no caption - run: make caption")
+        extras.append("no caption - run: make enhancer-caption")
     return line + ("  " + "; ".join(extras) if extras else "")
 
 
@@ -484,7 +484,7 @@ def fallback_for(args, room, workflow):
 
 def stuck_line(room):
     return (f"  STUCK   {room.key}: rejected {MAX_ATTEMPTS} times - fix its caption in "
-            f"rooms.yaml, then: make batch room={room.number} force=1")
+            f"rooms.yaml, then: make enhancer-batch room={room.number} force=1")
 
 
 def cmd_batch(args):
@@ -537,7 +537,7 @@ def cmd_batch(args):
     if uncaptioned:
         keys = [room.key for room, *_ in uncaptioned]
         return fail(f"{len(keys)} selected room(s) have no caption in {args.rooms_file} "
-                    "- run: make caption\n  " + "\n  ".join(keys))
+                    "- run: make enhancer-caption\n  " + "\n  ".join(keys))
     for room in copies:
         write_nearest(args, room)
         print(f"  copy    {room.key} (nearest 4x)")
@@ -551,7 +551,7 @@ def cmd_batch(args):
         if code is not None:
             return code
     # ComfyUI keeps its models loaded after rendering (~40 GB); free them on the
-    # way out, even after a failure, so vLLM has room to start for `make review`.
+    # way out, even after a failure, so vLLM has room to start for `make enhancer-review`.
     try:
         promoted = rejected = failed = 0
         for i, (room, entry, corrections, room_workflow) in enumerate(work, 1):

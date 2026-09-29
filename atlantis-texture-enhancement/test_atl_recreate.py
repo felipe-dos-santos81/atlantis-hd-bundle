@@ -83,7 +83,7 @@ class VerifyTests(DriverFixture):
         self.assertEqual(code, 1)
         self.assertIn("WRONGSIZE  room_001  is 1280x575, expected 1280x576", out)
         self.assertIn("UNRECORDED room_002  no attempt record promoted this file - "
-                      "run: make batch room=2 force=1", out)
+                      "run: make enhancer-batch room=2 force=1", out)
         self.assertIn("WRONGMODE  room_003  is RGBA, expected RGB", out)
         self.assertIn("UNREADABLE room_004", out)
 
@@ -338,13 +338,13 @@ class BatchTests(DriverFixture):
         testkit.write_rooms(self.rooms_file, caption="")
         code, _, err, mocks = self.batch()
         self.assertEqual(code, 2)
-        self.assertIn("run: make caption", err)
+        self.assertIn("run: make enhancer-caption", err)
         mocks.render.assert_not_called()
         # Regression: the dry run showed no plan for an uncaptioned room.
         code, out, _, _ = self.batch("--dry-run")
         self.assertEqual(code, 0)
         self.assertIn("NOCAPTION room_001 scene  -> 1280x576  windows 0-320  no caption - "
-                      "run: make caption", out)
+                      "run: make enhancer-caption", out)
         self.assertIn("NOCAPTION room_002 scene  -> 2272x576  windows 0-320 248-568", out)
 
     def test_preflight(self):

@@ -91,7 +91,7 @@ def indexed_image(pixels, palette=PALETTE):
 
 
 def make_source(root, rooms=DEFAULT_ROOMS):
-    """Write <root>/out like atlantis-textures-exporter's `make extract` and return it."""
+    """Write <root>/out like atlantis-textures-exporter's `make exporter-extract` and return it."""
     src = Path(root) / "out"
     assets = []
     for spec in rooms:

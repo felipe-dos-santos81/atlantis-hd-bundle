@@ -12,7 +12,7 @@ their native size, with local models:
   and reviews each render afterwards.
 
 Input: `../atlantis-textures-exporter/out/` (override with `ATL_SRC`), the output of
-`make extract` in atlantis-textures-exporter: indexed room PNGs and `manifest.json`.
+`make exporter-extract`: indexed room PNGs and `manifest.json`.
 Output: `data/rooms-ai/room_NNN.png` (override with `ATL_DST`).
 
 **Personal use only.** The extracted and regenerated art is LucasArts/Disney
@@ -21,30 +21,30 @@ copyright. Do not redistribute it. `data/` is gitignored; never commit art.
 ## Pipeline
 
 ```
-ATL_SRC ──[make caption]──▶ rooms.yaml ──(you edit)──┐
+ATL_SRC ──[make enhancer-caption]──▶ rooms.yaml ──(you edit)──┐
             vLLM up                                   ▼
-data/rooms-ai/ ◀──[make batch]── rooms.yaml + reviews.yaml (rejects only)
+data/rooms-ai/ ◀──[make enhancer-batch]── rooms.yaml + reviews.yaml (rejects only)
    │               ComfyUI up, vLLM stopped
-   └──[make review]──▶ reviews.yaml   (vLLM up)
+   └──[make enhancer-review]──▶ reviews.yaml   (vLLM up)
 ```
 
-1. **`make caption`** (vLLM up) describes every `scene` and `insert` room
+1. **`make enhancer-caption`** (vLLM up) describes every `scene` and `insert` room
    whose caption is blank and writes it into `rooms.yaml`, saving after each
    room. `force=1` redoes all; blanking one caption redoes that room.
 2. **Edit `rooms.yaml`.** The caption becomes the REFERENCE OBSERVATIONS
    block of every window's prompt; an insert's `TEXT:` section becomes the
    lettering its render must reproduce.
-3. **`make batch`** (ComfyUI up, vLLM stopped) renders every captioned room
+3. **`make enhancer-batch`** (ComfyUI up, vLLM stopped) renders every captioned room
    whose output is missing or whose latest attempt was rejected (see Checks),
    and writes each `skip` room as a nearest-neighbour 4x. On exit, even after
    a failure, it frees ComfyUI's models so vLLM can start.
-4. **`make review`** (vLLM up) judges every promoted room whose latest attempt
+4. **`make enhancer-review`** (vLLM up) judges every promoted room whose latest attempt
    is unreviewed and writes `reviews.yaml`.
-5. **`make batch` again** redoes only the rejected rooms, with the next seed
+5. **`make enhancer-batch` again** redoes only the rejected rooms, with the next seed
    and the issues as corrections. Repeat 4 and 5.
-6. **`make verify`** audits `data/rooms-ai/`.
+6. **`make enhancer-verify`** audits `data/rooms-ai/`.
 
-`make dry-run` prints what `batch` would do (windows, wraparound, margins,
+`make enhancer-dry-run` prints what `batch` would do (windows, wraparound, margins,
 corrections) without touching ComfyUI.
 
 ## Swapping the services on this host
@@ -55,9 +55,9 @@ GB10's 121 GB of unified memory.
 | Service | Start | Stop |
 |---|---|---|
 | vLLM | `docker start lmcache-server vllm-server` | `docker stop vllm-server lmcache-server` |
-| ComfyUI | `make server` (foreground) or `sudo systemctl start comfyui` | Ctrl-C, or `sudo systemctl stop comfyui` |
+| ComfyUI | `make enhancer-server` (foreground) or `sudo systemctl start comfyui` | Ctrl-C, or `sudo systemctl stop comfyui` |
 
-`make batch` refuses to start with less than 45 GB free (`memcheck=0` skips
+`make enhancer-batch` refuses to start with less than 45 GB free (`memcheck=0` skips
 the guard). If vLLM cannot start after a batch, free ComfyUI's models by hand:
 
 ```
@@ -95,7 +95,7 @@ output repeats exactly where the game's art does.
 
 ## Checks
 
-Before a render is promoted, `make batch` colour-matches it toward its guide
+Before a render is promoted, `make enhancer-batch` colour-matches it toward its guide
 in float CIE Lab (a render whose colours already agree comes back within one
 level), then checks it:
 
@@ -119,14 +119,14 @@ default workflow, the next batch renders it once more through
 `qwen-image-2.1-i2i-faithful` (denoise 0.9 instead of 1.0: a cleaner
 upscale that keeps closer to the source). If that is rejected too, batch
 reports the room and leaves it alone. Fix its caption, then run
-`make batch room=N force=1`. A failed attempt (a ComfyUI error, a timeout, Ctrl-C) has no
+`make enhancer-batch room=N force=1`. A failed attempt (a ComfyUI error, a timeout, Ctrl-C) has no
 record and never counts, so a room only failing on infrastructure is
 retried on every run instead, and batch exits 1.
 
 To restart a room from scratch, delete `data/rooms-ai/.quality/room_NNN/`
 **and** its entry in `reviews.yaml` — a leftover entry becomes current again
 once new attempts reach its attempt number — then run
-`make batch room=N force=1`.
+`make enhancer-batch room=N force=1`.
 
 ## Outputs and the audit folder
 
@@ -143,15 +143,17 @@ data/rooms-ai/.quality/room_NNN/
 
 ## Commands
 
+Run these from the repository root:
+
 | Target | What it does |
 |---|---|
-| `make caption [room=] [force=1]` | Write captions into `rooms.yaml` |
-| `make dry-run [room=] [workflow=] [strength=] [force=1]` | Show what `batch` would render |
-| `make batch [room=] [workflow=] [strength=] [memcheck=0] [force=1]` | Render and promote into `data/rooms-ai/` |
-| `make review [room=] [force=1]` | Write `reviews.yaml` |
-| `make verify [room=]` | Audit `data/rooms-ai/` |
-| `make server` | Start ComfyUI from `~/ComfyUI` on :8188 |
-| `make install` / `make check` / `make test` / `make clean` | venv / byte-compile / unit tests / caches |
+| `make enhancer-caption [room=] [force=1]` | Write captions into `rooms.yaml` |
+| `make enhancer-dry-run [room=] [workflow=] [strength=] [force=1]` | Show what `batch` would render |
+| `make enhancer-batch [room=] [workflow=] [strength=] [memcheck=0] [force=1]` | Render and promote into `data/rooms-ai/` |
+| `make enhancer-review [room=] [force=1]` | Write `reviews.yaml` |
+| `make enhancer-verify [room=]` | Audit `data/rooms-ai/` |
+| `make enhancer-server` | Start ComfyUI from `~/ComfyUI` on :8188 |
+| `make enhancer-install` / `make enhancer-check` / `make enhancer-test` / `make enhancer-clean` | venv / byte-compile / unit tests / caches |
 
 `room="1 29 58"` selects rooms by number; every stage target also takes
 `src=DIR` and `dst=DIR`. Environment overrides: `ATL_SRC`, `ATL_DST`,
@@ -160,7 +162,7 @@ data/rooms-ai/.quality/room_NNN/
 
 ## Setup
 
-- `make install` creates `.venv` with Pillow, PyYAML and numpy.
+- `make enhancer-install` creates `.venv` with Pillow, PyYAML and numpy.
 - ComfyUI at `~/ComfyUI` (override with `COMFY_DIR`), at or after commit
   c194dd0 (2026-09-20), with these files under `models/`:
   - `qwen-edit-2511-canny`: `diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors`,
@@ -171,7 +173,7 @@ data/rooms-ai/.quality/room_NNN/
     `text_encoders/qwen3vl_8b_bf16.safetensors`,
     `vae/qwen_image_2.1_vae_bf16.safetensors`.
 
-  `make batch` checks the files and the node classes before rendering.
+  `make enhancer-batch` checks the files and the node classes before rendering.
 - vLLM serving `Qwen/Qwen3.8-27B` at `http://127.0.0.1:8000/v1`.
 
 ## Project structure
@@ -188,6 +190,6 @@ data/rooms-ai/.quality/room_NNN/
 | `comfy_client.py` | ComfyUI HTTP client and the workflow registry; the only place that knows node ids |
 | `recreation_qwen2511_canny.json`, `recreation_qwen21_i2i.json` | ComfyUI API graphs |
 | `rooms.yaml` | Kinds and captions of the 96 rooms |
-| `Makefile`, `run_batch.sh`, `run_server.sh` | Targets and wrappers |
+| `run_batch.sh`, `run_server.sh` | Wrappers (targets live in the root `Makefile`) |
 | `testkit.py`, `test_*.py` | Test support and unit tests (no GPU, no network) |
-| `docs/superpowers/` | The design spec and the implementation plan |
+| `docs/superpowers/` | Historical design spec and implementation plan (they predate the root `Makefile` target names) |

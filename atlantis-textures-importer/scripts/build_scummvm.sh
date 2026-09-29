@@ -20,7 +20,7 @@ done
 if [ ! -d "$SRC/.git" ]; then
 	git clone --depth 1 --branch "$TAG" https://github.com/scummvm/scummvm.git "$SRC"
 elif [ -f "$STAMP" ] && [ "$(applied)" != "$(cat "$STAMP")" ]; then
-	echo "vendor/scummvm has unsaved edits: run 'make engine-patch' for existing files;" >&2
+	echo "vendor/scummvm has unsaved edits: run 'make importer-engine-patch' for existing files;" >&2
 	echo "edits to hd_* files belong in engine/scumm/" >&2
 	exit 1
 fi
