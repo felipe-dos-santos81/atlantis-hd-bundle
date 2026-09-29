@@ -15,3 +15,7 @@ virtualenv.
 
 Neither project commits game data or generated art: `out/`, `data/` and
 `reviews.yaml` are gitignored. You need your own copy of the game.
+
+## License
+
+[MIT](LICENSE)
